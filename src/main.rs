@@ -6,6 +6,16 @@ use tracing::info;
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let args: Vec<String> = std::env::args().collect();
 
+    if args.len() > 1 && (args[1] == "--help" || args[1] == "-h" || args[1] == "help") {
+        print_help();
+        return Ok(());
+    }
+
+    if args.len() > 1 && (args[1] == "--version" || args[1] == "-V" || args[1] == "version") {
+        println!("jfp-edge-radar v{}", env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
+
     // Check for CLI subcommands
     if args.len() > 1 && args[1] == "report" {
         run_report_subcommand(&args[2..])?;
@@ -112,4 +122,39 @@ fn run_report_subcommand(subargs: &[String]) -> Result<(), Box<dyn std::error::E
     }
 
     Ok(())
+}
+
+fn print_help() {
+    println!(
+        r#"🛡️ JFP-Paradox Edge Radar v{} - Autonomous Agent Sniffer (ASA)
+
+USAGE:
+    jfp-edge-radar [COMMAND] [OPTIONS]
+
+COMMANDS:
+    (default)       Start the reverse-proxy radar engine listening on RADAR_BIND_ADDR.
+    monitor         Start live terminal dashboard displaying real-time threats and statistics.
+    report          Verify cryptographic SHA-256 proof chain and generate forensic Markdown report.
+    --help, -h      Print help information.
+    --version, -V   Print version information.
+
+OPTIONS FOR 'report':
+    --log <PATH>    Path to proof JSONL log file (default: /var/log/jfp/asa_radar_proof.jsonl or $RADAR_PROOF_LOG)
+    --out <PATH>    Export generated Markdown report to file
+
+OPTIONS FOR 'monitor':
+    --log <PATH>    Path to proof JSONL log file to monitor in real-time
+
+ENVIRONMENT VARIABLES:
+    RADAR_BIND_ADDR          Address to bind the radar server (default: 0.0.0.0:8080)
+    RADAR_UPSTREAM_ADDR      Upstream backend to protect (e.g. 127.0.0.1:8000)
+    RADAR_PROOF_LOG          Path to cryptographically chained proof log (default: /var/log/jfp/asa_radar_proof.jsonl)
+    RADAR_DRY_RUN            Enable audit/dry-run mode without active blocking (true/false)
+    RADAR_MAX_SESSIONS       Max tracking capacity for IP state LRU table (default: 131072)
+    RADAR_MAX_TARPIT_SESSIONS Max concurrent Slow-Drip Tarpit sockets (default: 512)
+    RADAR_ENABLE_MITIGATION  Enable automated iptables kernel blocking (true/false)
+    RADAR_BAN_TTL_SECS       Duration in seconds for kernel ban before auto-unban (default: 86400)
+"#,
+        env!("CARGO_PKG_VERSION")
+    );
 }
