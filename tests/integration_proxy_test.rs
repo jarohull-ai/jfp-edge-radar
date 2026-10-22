@@ -1,0 +1,109 @@
+use bytes::Bytes;
+use http_body_util::Full;
+use hyper::service::service_fn;
+use hyper::{Request, Response, StatusCode};
+use hyper_util::rt::TokioIo;
+use jfp_edge_radar::{RadarConfig, RadarServer};
+use std::net::SocketAddr;
+use std::time::Duration;
+use tokio::net::TcpListener;
+
+#[tokio::test]
+async fn test_radar_reverse_proxy_and_attack_interception() {
+    // 1. Launch a mock upstream backend server
+    let upstream_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let upstream_addr: SocketAddr = upstream_listener.local_addr().unwrap();
+
+    tokio::spawn(async move {
+        loop {
+            if let Ok((stream, _)) = upstream_listener.accept().await {
+                let io = TokioIo::new(stream);
+                tokio::spawn(async move {
+                    let _ = hyper::server::conn::http1::Builder::new()
+                        .serve_connection(
+                            io,
+                            service_fn(|_req: Request<hyper::body::Incoming>| async {
+                                Ok::<_, hyper::Error>(
+                                    Response::builder()
+                                        .status(StatusCode::OK)
+                                        .header("x-backend-id", "real-upstream-backend")
+                                        .body(Full::new(Bytes::from(r#"{"data":"upstream_ok"}"#)))
+                                        .unwrap(),
+                                )
+                            }),
+                        )
+                        .await;
+                });
+            }
+        }
+    });
+
+    // 2. Launch JFP Edge Radar in front of the upstream
+    let radar_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let radar_addr = radar_listener.local_addr().unwrap();
+
+    let tmp_proof = tempfile::NamedTempFile::new().unwrap();
+    let config = RadarConfig {
+        bind_addr: radar_addr,
+        upstream_addr: Some(upstream_addr),
+        proof_log_path: tmp_proof.path().to_path_buf(),
+        max_session_idle_secs: 60,
+        enable_honey_tokens: true,
+    };
+
+    let server = RadarServer::new(config);
+    tokio::spawn(async move {
+        if let Err(e) = server.run_with_listener(radar_listener).await {
+            eprintln!("RadarServer error: {:?}", e);
+        }
+    });
+
+    tokio::time::sleep(Duration::from_millis(150)).await;
+
+    // Helper client function with connection retry
+    let client_send = |path: &str, headers: &[(&str, &str)]| {
+        let addr = radar_addr;
+        let p = path.to_string();
+        let h: Vec<(String, String)> = headers.iter().map(|(a, b)| (a.to_string(), b.to_string())).collect();
+        async move {
+            let mut stream = None;
+            for _ in 0..20 {
+                if let Ok(s) = tokio::net::TcpStream::connect(addr).await {
+                    stream = Some(s);
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+            let s = stream.expect("Failed to connect to radar gateway");
+            let (mut sender, conn) = hyper::client::conn::http1::handshake(TokioIo::new(s)).await.unwrap();
+            tokio::spawn(async move {
+                let _ = conn.await;
+            });
+
+            let mut req = Request::builder().uri(p);
+            for (k, v) in h {
+                req = req.header(k, v);
+            }
+            let req = req.body(Full::new(Bytes::new())).unwrap();
+            sender.send_request(req).await.unwrap()
+        }
+    };
+
+    // 3. Test clean request -> should be forwarded to upstream
+    let clean_resp = client_send("/api/products", &[]).await;
+    assert_eq!(clean_resp.status(), StatusCode::OK);
+    assert_eq!(
+        clean_resp.headers().get("x-backend-id").unwrap(),
+        "real-upstream-backend"
+    );
+
+    // 4. Test malicious PHP-2-Shell / PHP-CGI injection request -> MUST be intercepted by Radar with 403
+    let attack_resp = client_send("/index.php?-d+allow_url_include=on", &[("PHP_VALUE", "auto_prepend_file=php://input")]).await;
+    assert_eq!(attack_resp.status(), StatusCode::FORBIDDEN);
+    assert!(attack_resp.headers().contains_key("x-jfp-proof-hash"));
+
+    // 5. Verify proof log written to disk
+    let log_content = std::fs::read_to_string(tmp_proof.path()).unwrap();
+    assert!(log_content.contains("ASA_ATTACK_BLOCKED"));
+    assert!(log_content.contains("PHP_CGI_ARG_INJECTION"));
+}
