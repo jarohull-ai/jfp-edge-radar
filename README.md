@@ -1,6 +1,7 @@
 # JFP-Paradox Edge Radar (ASA - Autonomous Agent Sniffer)
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![License: JFP Fair-Shield (<$10M Free)](https://img.shields.io/badge/License-JFP%20Fair--Shield%20(%3C$10M%20Free)-green.svg)](LICENSE)
+[![Enterprise: Commercial >=$10M](https://img.shields.io/badge/Commercial-%3E=$10M%20Revenue-blue.svg)](LICENSE)
 [![Language: Rust](https://img.shields.io/badge/Rust-1.75%2B-orange.svg)](https://www.rust-lang.org/)
 [![Crates.io](https://img.shields.io/badge/crates.io-v0.4.0-red.svg)](https://crates.io/crates/jfp-edge-radar)
 [![Release](https://img.shields.io/github/v/release/jarohull-ai/jfp-edge-radar)](https://github.com/jarohull-ai/jfp-edge-radar/releases)
@@ -9,6 +10,16 @@
 **JFP-Paradox Edge Radar** is an ultra-lightweight, high-performance, deterministic perimeter security gateway and reverse proxy built in **Rust** as part of the **JARO Flash Protocol (JFP)** ecosystem.
 
 It is engineered specifically to intercept autonomous AI agent botnets, mutating zero-day exploit scanners, and memory-exhaustion/RCE attacks targeting PHP runtimes (including **PHP-2-Shell: CVE-2026-109618 and CVE-2026-109619**) with **zero LLM overhead in the network critical path (0ms inference latency, 100% deterministic execution)**.
+
+---
+
+### 📖 Full Project Wiki & Knowledge Base
+* 🏛️ **[Architecture & The 3 Shields](wiki/Architecture-and-The-Three-Shields.md)**
+* 🚀 **[Production Deployment & Systemd Guide](wiki/Production-Deployment-Guide.md)**
+* 🔍 **[Incident Response & Forensic Cryptographic Auditing](wiki/Incident-Response-and-Forensics.md)**
+* ⚙️ **[Configuration & Tuning Reference](wiki/Configuration-and-Tuning.md)**
+* 📜 **[Licensing & Commercial Use ($10M Tier)](wiki/Licensing-and-Commercial-Use.md)**
+* 🔬 **[Deep-Dive Security Scenarios & Traces](docs/SCENARIOS_AND_SECURITY_PROOFS.md)**
 
 ---
 
@@ -237,6 +248,11 @@ cargo test --test e2e_scenarios_test -- --nocapture
 
 ---
 
-## 📜 License
+## 📜 License & Community Defensive Shield
 
-Licensed under the [MIT License](LICENSE). Built with precision by the JARO Flash Protocol (JFP) defensive engineering team.
+This project is licensed under the **JFP Community & Enterprise Commercial Shield License v1.0** (see full terms in [LICENSE](LICENSE)).
+
+* **🛡️ 100% Free Defensive Tier (< $10,000,000 USD Gross Annual Revenue):**  
+  Free to use, inspect, modify, run in production, and deploy for all individuals, researchers, non-profits, open-source projects, and small/medium businesses earning under \$10M annually. Everyone has the right to defend their infrastructure against botnets and exploits.
+* **💼 Commercial Enterprise Tier (>= $10,000,000 USD Gross Annual Revenue):**  
+  Enterprises and corporations with annual revenues of \$10M or higher require a commercial license agreement. Contact `licensing@jarohull.ai`.

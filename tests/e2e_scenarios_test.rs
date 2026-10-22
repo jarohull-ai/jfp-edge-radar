@@ -4,7 +4,9 @@ use hyper::header::HeaderMap;
 use hyper::service::service_fn;
 use hyper::{Request, Response, StatusCode};
 use hyper_util::rt::TokioIo;
-use jfp_edge_radar::{AmbiguityViolation, CanonicalShield, ForensicReporter, RadarConfig, RadarServer};
+use jfp_edge_radar::{
+    AmbiguityViolation, CanonicalShield, ForensicReporter, RadarConfig, RadarServer,
+};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -62,8 +64,12 @@ async fn test_scenario_1_php2shell_cve_2026_exploitation() {
 
     // Attacker sends PHP-2-Shell exploit payload
     let stream = tokio::net::TcpStream::connect(radar_addr).await.unwrap();
-    let (mut sender, conn) = hyper::client::conn::http1::handshake(TokioIo::new(stream)).await.unwrap();
-    tokio::spawn(async move { let _ = conn.await; });
+    let (mut sender, conn) = hyper::client::conn::http1::handshake(TokioIo::new(stream))
+        .await
+        .unwrap();
+    tokio::spawn(async move {
+        let _ = conn.await;
+    });
 
     let attack_req = Request::builder()
         .uri("/index.php?-d+allow_url_include=on+-d+auto_prepend_file=php://input")
@@ -75,7 +81,10 @@ async fn test_scenario_1_php2shell_cve_2026_exploitation() {
 
     println!("-> Attack Request: GET /index.php?-d+allow_url_include=on... with PHP_VALUE header");
     println!("<- Response Status: {}", resp.status());
-    println!("<- Proof Hash Header: {:?}", resp.headers().get("x-jfp-proof-hash"));
+    println!(
+        "<- Proof Hash Header: {:?}",
+        resp.headers().get("x-jfp-proof-hash")
+    );
 
     assert_eq!(resp.status(), StatusCode::FORBIDDEN);
     assert!(resp.headers().contains_key("x-jfp-proof-hash"));
@@ -99,7 +108,10 @@ async fn test_scenario_2_multipass_url_encoding_obfuscation() {
     println!("-> Raw obfuscated query: {}", double_encoded_query);
     println!("<- Canonical check result: {:?}", result);
 
-    assert!(matches!(result, Err(AmbiguityViolation::DoubleUrlEncodingDetected(_))));
+    assert!(matches!(
+        result,
+        Err(AmbiguityViolation::DoubleUrlEncodingDetected(_))
+    ));
     println!("✅ Verified: Fixed-point URL decoding caught nested %252d evasion and blocked it.");
 }
 
@@ -128,9 +140,16 @@ async fn test_scenario_3_autonomous_ai_agent_timing_loop_and_recon() {
         let addr = radar_addr;
         async move {
             let stream = tokio::net::TcpStream::connect(addr).await.unwrap();
-            let (mut sender, conn) = hyper::client::conn::http1::handshake(TokioIo::new(stream)).await.unwrap();
-            tokio::spawn(async move { let _ = conn.await; });
-            let req = Request::builder().uri(uri).body(Full::new(Bytes::new())).unwrap();
+            let (mut sender, conn) = hyper::client::conn::http1::handshake(TokioIo::new(stream))
+                .await
+                .unwrap();
+            tokio::spawn(async move {
+                let _ = conn.await;
+            });
+            let req = Request::builder()
+                .uri(uri)
+                .body(Full::new(Bytes::new()))
+                .unwrap();
             sender.send_request(req).await.unwrap()
         }
     };
@@ -146,7 +165,10 @@ async fn test_scenario_3_autonomous_ai_agent_timing_loop_and_recon() {
     let resp = client_send("/AGENTS.md").await;
 
     println!("<- Response Status: {}", resp.status());
-    println!("<- Defense Header: {:?}", resp.headers().get("x-jfp-proof-hash"));
+    println!(
+        "<- Defense Header: {:?}",
+        resp.headers().get("x-jfp-proof-hash")
+    );
 
     assert_eq!(resp.status(), StatusCode::FORBIDDEN);
     assert!(resp.headers().contains_key("x-jfp-proof-hash"));
@@ -207,9 +229,15 @@ async fn test_scenario_5_tamper_evident_proof_chain_integrity() {
         "indicators": ["PHP_CGI_ARG_INJECTION: detected '-d'"]
     });
 
-    let rec1 = logger.log_event("ASA_ATTACK_BLOCKED", "203.0.113.42", details1).unwrap();
-    let rec2 = logger.log_event("ASA_ATTACK_BLOCKED", "203.0.113.42", details2).unwrap();
-    let rec3 = logger.log_event("ASA_ATTACK_BLOCKED", "203.0.113.42", details3).unwrap();
+    let rec1 = logger
+        .log_event("ASA_ATTACK_BLOCKED", "203.0.113.42", details1)
+        .unwrap();
+    let rec2 = logger
+        .log_event("ASA_ATTACK_BLOCKED", "203.0.113.42", details2)
+        .unwrap();
+    let rec3 = logger
+        .log_event("ASA_ATTACK_BLOCKED", "203.0.113.42", details3)
+        .unwrap();
 
     println!("-> Chained block 0 hash: {}", rec1.entry_hash);
     println!("-> Chained block 1 hash: {}", rec2.entry_hash);
@@ -229,7 +257,10 @@ async fn test_scenario_5_tamper_evident_proof_chain_integrity() {
 
     // Re-audit the tampered log
     let tampered_stats = ForensicReporter::analyze_log(tmp_proof.path()).unwrap();
-    println!("<- Tampered chain verification status: chain_verified = {}, broken_at = {:?}", tampered_stats.chain_verified, tampered_stats.broken_chain_at);
+    println!(
+        "<- Tampered chain verification status: chain_verified = {}, broken_at = {:?}",
+        tampered_stats.chain_verified, tampered_stats.broken_chain_at
+    );
     assert!(!tampered_stats.chain_verified);
     assert_eq!(tampered_stats.broken_chain_at, Some(2));
     println!("✅ Verified: Tampering of a single byte breaks downstream SHA-256 links and pinpointed record #2.");

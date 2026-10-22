@@ -119,6 +119,12 @@ pub struct SessionTracker {
     max_sessions: usize,
 }
 
+impl Default for SessionTracker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SessionTracker {
     pub fn new() -> Self {
         Self::with_capacity(DEFAULT_MAX_SESSIONS)
@@ -149,7 +155,10 @@ impl SessionTracker {
             self.evict_pressure();
         }
 
-        let mut entry = self.sessions.entry(tracking_ip).or_insert_with(|| IpSession::new(tracking_ip));
+        let mut entry = self
+            .sessions
+            .entry(tracking_ip)
+            .or_insert_with(|| IpSession::new(tracking_ip));
         entry.record_request(
             method.to_string(),
             path.to_string(),
@@ -186,13 +195,15 @@ impl SessionTracker {
     fn evict_pressure(&self) {
         // Pass 1: Prune all one-hit sessions (total_requests <= 1)
         let before = self.sessions.len();
-        self.sessions.retain(|_, s| s.total_requests.load(Ordering::Relaxed) > 1);
+        self.sessions
+            .retain(|_, s| s.total_requests.load(Ordering::Relaxed) > 1);
         let after_pass1 = self.sessions.len();
 
         // Pass 2: If still overflowing, aggressively evict older 25% of sessions
         if after_pass1 >= self.max_sessions {
             let now = Instant::now();
-            self.sessions.retain(|_, s| now.duration_since(s.last_seen_instant) < Duration::from_secs(60));
+            self.sessions
+                .retain(|_, s| now.duration_since(s.last_seen_instant) < Duration::from_secs(60));
         }
 
         tracing::info!(
@@ -255,8 +266,14 @@ mod tests {
         tracker.track_request(ip4, "GET", "/", None, None, 0);
 
         // One-hit scanners (ip2 and ip3) were dropped; ip1 and ip4 survived
-        assert!(tracker.sessions.contains_key(&canonicalize_tracking_ip(ip1)));
-        assert!(tracker.sessions.contains_key(&canonicalize_tracking_ip(ip4)));
-        assert!(!tracker.sessions.contains_key(&canonicalize_tracking_ip(ip2)));
+        assert!(tracker
+            .sessions
+            .contains_key(&canonicalize_tracking_ip(ip1)));
+        assert!(tracker
+            .sessions
+            .contains_key(&canonicalize_tracking_ip(ip4)));
+        assert!(!tracker
+            .sessions
+            .contains_key(&canonicalize_tracking_ip(ip2)));
     }
 }

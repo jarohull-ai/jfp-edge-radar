@@ -1,0 +1,49 @@
+name: Rust CI & Deterministic Test Suite
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: Test Suite (Unit, Integration & E2E Scenarios)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache Cargo Dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Code Formatting Check (rustfmt)
+        run: cargo fmt -- --check
+
+      - name: Linter Check (clippy)
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Run Full Test Suite (27 Tests)
+        run: cargo test --all-targets --all-features --verbose
+
+      - name: Run E2E Security Scenarios Trace
+        run: cargo test --test e2e_scenarios_test -- --nocapture

@@ -113,10 +113,7 @@ mod tests {
         let untrusted_peer: IpAddr = "203.0.113.50".parse().unwrap();
 
         let mut headers = HeaderMap::new();
-        headers.insert(
-            "cf-connecting-ip",
-            HeaderValue::from_static("198.51.100.1"),
-        );
+        headers.insert("cf-connecting-ip", HeaderValue::from_static("198.51.100.1"));
         headers.insert(
             "x-forwarded-for",
             HeaderValue::from_static("1.2.3.4, 5.6.7.8"),

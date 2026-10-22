@@ -7,14 +7,23 @@ pub struct TerminalMonitor;
 
 impl TerminalMonitor {
     /// Runs a live-updating terminal dashboard (NOC screen) monitoring the proof log.
-    pub async fn run(log_path: &Path, refresh_interval: Duration) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn run(
+        log_path: &Path,
+        refresh_interval: Duration,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         loop {
             // ANSI escape to clear terminal and reset cursor
             print!("\x1B[2J\x1B[1;1H");
 
-            println!("╔════════════════════════════════════════════════════════════════════════════╗");
-            println!("║          📡 JFP-PARADOX EDGE RADAR (v0.3.0) — LIVE COMBAT MONITOR         ║");
-            println!("╚════════════════════════════════════════════════════════════════════════════╝");
+            println!(
+                "╔════════════════════════════════════════════════════════════════════════════╗"
+            );
+            println!(
+                "║          📡 JFP-PARADOX EDGE RADAR (v0.3.0) — LIVE COMBAT MONITOR         ║"
+            );
+            println!(
+                "╚════════════════════════════════════════════════════════════════════════════╝"
+            );
             println!(" Monitoring: {}\n", log_path.display());
 
             match ForensicReporter::analyze_log(log_path) {
@@ -31,7 +40,10 @@ impl TerminalMonitor {
                     println!("  • Hard Blocked Attacks:  {}", stats.blocked_attacks);
                     println!("  • Honey Deceptions:      {}", stats.honey_deceptions);
                     println!("  • Dry-Run Simulations:   {}", stats.dry_run_simulations);
-                    println!("  • Unique Threat Actors:  {}", stats.unique_attacker_ips.len());
+                    println!(
+                        "  • Unique Threat Actors:  {}",
+                        stats.unique_attacker_ips.len()
+                    );
                     println!();
 
                     println!("  [ THREAT VECTOR DISTRIBUTION ]");
@@ -52,7 +64,10 @@ impl TerminalMonitor {
                     println!("  • Backend PHP-FPM Overhead Avoided: 100%");
                     println!();
                     println!("────────────────────────────────────────────────────────────────────────────");
-                    println!(" Press Ctrl+C to exit monitor | Refreshing every {}s...", refresh_interval.as_secs());
+                    println!(
+                        " Press Ctrl+C to exit monitor | Refreshing every {}s...",
+                        refresh_interval.as_secs()
+                    );
                 }
                 Err(e) => {
                     println!("  ⚠️ Waiting for telemetry: {}", e);

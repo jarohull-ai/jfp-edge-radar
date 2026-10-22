@@ -141,8 +141,14 @@ impl ForensicReporter {
         let mut md = String::new();
 
         md.push_str("# 🛡️ JFP-Paradox Edge Radar - Incident Response & Forensics Report\n\n");
-        md.push_str(&format!("**Generated At:** {} UTC  \n", Utc::now().to_rfc3339()));
-        md.push_str(&format!("**Source Proof Log:** `{}`  \n\n", log_path.display()));
+        md.push_str(&format!(
+            "**Generated At:** {} UTC  \n",
+            Utc::now().to_rfc3339()
+        ));
+        md.push_str(&format!(
+            "**Source Proof Log:** `{}`  \n\n",
+            log_path.display()
+        ));
 
         md.push_str("## 🔐 1. Cryptographic Proof Chain Integrity\n\n");
         if stats.chain_verified {
@@ -157,11 +163,26 @@ impl ForensicReporter {
         md.push_str("## 📊 2. Incident Telemetry Overview\n\n");
         md.push_str("| Metric | Value |\n");
         md.push_str("| :--- | :--- |\n");
-        md.push_str(&format!("| **Total Logged Events** | `{}` |\n", stats.total_records));
-        md.push_str(&format!("| **Hard Blocked Attacks** | `{}` |\n", stats.blocked_attacks));
-        md.push_str(&format!("| **Synthetic Honey Deceptions** | `{}` |\n", stats.honey_deceptions));
-        md.push_str(&format!("| **Dry-Run Audit Simulations** | `{}` |\n", stats.dry_run_simulations));
-        md.push_str(&format!("| **Unique Threat Actors (IPs)** | `{}` |\n\n", stats.unique_attacker_ips.len()));
+        md.push_str(&format!(
+            "| **Total Logged Events** | `{}` |\n",
+            stats.total_records
+        ));
+        md.push_str(&format!(
+            "| **Hard Blocked Attacks** | `{}` |\n",
+            stats.blocked_attacks
+        ));
+        md.push_str(&format!(
+            "| **Synthetic Honey Deceptions** | `{}` |\n",
+            stats.honey_deceptions
+        ));
+        md.push_str(&format!(
+            "| **Dry-Run Audit Simulations** | `{}` |\n",
+            stats.dry_run_simulations
+        ));
+        md.push_str(&format!(
+            "| **Unique Threat Actors (IPs)** | `{}` |\n\n",
+            stats.unique_attacker_ips.len()
+        ));
 
         md.push_str("## 🎯 3. Attack Vector Breakdown\n\n");
         md.push_str("| Vector Signature | Detections |\n");
@@ -171,7 +192,7 @@ impl ForensicReporter {
         for (v, count) in vectors {
             md.push_str(&format!("| `{}` | `{}` |\n", v, count));
         }
-        md.push_str("\n");
+        md.push('\n');
 
         md.push_str("## 🚨 4. Top Malicious Ingress Sources\n\n");
         md.push_str("| Attacker IP | Malicious Requests |\n");
@@ -181,7 +202,7 @@ impl ForensicReporter {
         for (ip, count) in offenders.iter().take(10) {
             md.push_str(&format!("| `{}` | `{}` |\n", ip, count));
         }
-        md.push_str("\n");
+        md.push('\n');
 
         md.push_str("## 💡 5. Resource Asymmetry Impact\n\n");
         let estimated_tokens_wasted = (stats.blocked_attacks + stats.honey_deceptions) * 850;
@@ -206,17 +227,29 @@ mod tests {
         let log_file = dir.path().join("proof.jsonl");
 
         let logger = ProofLogger::new(log_file.clone(), None, None);
-        logger.log_event("ASA_ATTACK_BLOCKED", "198.51.100.10", serde_json::json!({
-            "threat_assessment": {
-                "indicators": ["PHP_CGI_ARG_INJECTION: detected '-d'"]
-            }
-        })).unwrap();
+        logger
+            .log_event(
+                "ASA_ATTACK_BLOCKED",
+                "198.51.100.10",
+                serde_json::json!({
+                    "threat_assessment": {
+                        "indicators": ["PHP_CGI_ARG_INJECTION: detected '-d'"]
+                    }
+                }),
+            )
+            .unwrap();
 
-        logger.log_event("ASA_HONEY_DECEPTION_SERVED", "198.51.100.11", serde_json::json!({
-            "threat_assessment": {
-                "indicators": ["STRUCTURAL_RECON: AI Agent Metadata Probing"]
-            }
-        })).unwrap();
+        logger
+            .log_event(
+                "ASA_HONEY_DECEPTION_SERVED",
+                "198.51.100.11",
+                serde_json::json!({
+                    "threat_assessment": {
+                        "indicators": ["STRUCTURAL_RECON: AI Agent Metadata Probing"]
+                    }
+                }),
+            )
+            .unwrap();
 
         let stats = ForensicReporter::analyze_log(&log_file).unwrap();
         assert!(stats.chain_verified);

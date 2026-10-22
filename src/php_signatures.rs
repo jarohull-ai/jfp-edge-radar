@@ -86,7 +86,10 @@ impl PhpSignatureEngine {
             // FastCGI / Apache header smuggling via spaces or invalid control chars
             if name.starts_with(' ') || name.ends_with(' ') || val.contains('\0') {
                 score += 0.55;
-                flags.push(format!("HEADER_SMUGGLING: malformed header name '{}'", name));
+                flags.push(format!(
+                    "HEADER_SMUGGLING: malformed header name '{}'",
+                    name
+                ));
             }
 
             // Multipart boundary depth attack (CVE-2026-109618 OOM Heap Exhaustion)
@@ -94,16 +97,22 @@ impl PhpSignatureEngine {
                 let boundary_count = val_lower.matches("boundary").count();
                 if boundary_count > 1 || val_lower.len() > 512 {
                     score += 0.45;
-                    flags.push("OOM_MULTIPART_ANOMALY: nested or oversized multipart boundary".to_string());
+                    flags.push(
+                        "OOM_MULTIPART_ANOMALY: nested or oversized multipart boundary".to_string(),
+                    );
                 }
             }
 
             // Transfer-Encoding chunked smuggling tricks
-            if name_lower == "transfer-encoding" {
-                if val_lower.contains("chunked") && val_lower != "chunked" {
-                    score += 0.50;
-                    flags.push(format!("OOM_CHUNKED_SMUGGLING: obfuscated chunked header '{}'", val));
-                }
+            if name_lower == "transfer-encoding"
+                && val_lower.contains("chunked")
+                && val_lower != "chunked"
+            {
+                score += 0.50;
+                flags.push(format!(
+                    "OOM_CHUNKED_SMUGGLING: obfuscated chunked header '{}'",
+                    val
+                ));
             }
         }
 
@@ -112,7 +121,10 @@ impl PhpSignatureEngine {
             // Suspicious single request payload aiming for immediate OOM bailout (> 32MB by default)
             if cl > 32 * 1024 * 1024 {
                 score += 0.40;
-                flags.push(format!("OOM_MASSIVE_BODY: Content-Length {} bytes exceeds threshold", cl));
+                flags.push(format!(
+                    "OOM_MASSIVE_BODY: Content-Length {} bytes exceeds threshold",
+                    cl
+                ));
             }
         }
 

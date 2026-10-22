@@ -14,8 +14,14 @@ pub struct TarpitGuard {
 
 impl Drop for TarpitGuard {
     fn drop(&mut self) {
-        let remaining = self.counter.fetch_sub(1, Ordering::SeqCst).saturating_sub(1);
-        tracing::debug!("Tarpit session ended. Active tarpit descriptors: {}", remaining);
+        let remaining = self
+            .counter
+            .fetch_sub(1, Ordering::SeqCst)
+            .saturating_sub(1);
+        tracing::debug!(
+            "Tarpit session ended. Active tarpit descriptors: {}",
+            remaining
+        );
     }
 }
 
@@ -28,11 +34,7 @@ pub struct SlowDripBody {
 }
 
 impl SlowDripBody {
-    pub fn new(
-        interval_duration: Duration,
-        total_bytes: usize,
-        counter: Arc<AtomicUsize>,
-    ) -> Self {
+    pub fn new(interval_duration: Duration, total_bytes: usize, counter: Arc<AtomicUsize>) -> Self {
         counter.fetch_add(1, Ordering::SeqCst);
         let guard = TarpitGuard { counter };
 

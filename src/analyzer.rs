@@ -14,9 +14,9 @@ pub struct ThreatAssessment {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DefensiveAction {
     Allow,
-    Tarpit(u64), // Delay response by N ms to exhaust attacker's LLM tokens/context
+    Tarpit(u64),  // Delay response by N ms to exhaust attacker's LLM tokens/context
     DeceiveHoney, // Return synthetic poisoned decoy (e.g., fake llms.txt or AGENTS.md)
-    BlockProof,  // Immediate drop and proof-log entry
+    BlockProof,   // Immediate drop and proof-log entry
 }
 
 pub struct AsaAnalyzer;
@@ -36,8 +36,8 @@ impl AsaAnalyzer {
 
         // 1. Structural Reconnaissance Patterns (AI Agents)
         let path_lower = current_path.to_lowercase();
-        if path_lower.contains("agents.md") 
-            || path_lower.contains("llms.txt") 
+        if path_lower.contains("agents.md")
+            || path_lower.contains("llms.txt")
             || path_lower.contains("ai-plugin.json")
             || path_lower.starts_with("/.well-known/agent")
         {
@@ -46,12 +46,8 @@ impl AsaAnalyzer {
         }
 
         // 2. PHP-2-Shell & OOM Exploit Heuristics (CVE-2026-109618 / CVE-2026-109619)
-        let php_inspection = PhpSignatureEngine::inspect_request(
-            current_path,
-            query,
-            headers,
-            content_length,
-        );
+        let php_inspection =
+            PhpSignatureEngine::inspect_request(current_path, query, headers, content_length);
 
         if php_inspection.is_suspicious {
             score += php_inspection.severity_score;
@@ -62,12 +58,18 @@ impl AsaAnalyzer {
         if let Some(dt) = delta_ms {
             // Autonomous agents typically exhibit a thinking window between 1200ms and 8500ms
             // when parsing tool responses / error reflections
-            if dt >= 1200 && dt <= 8500 {
+            if (1200..=8500).contains(&dt) {
                 score += 0.25;
-                indicators.push(format!("TIMING_WINDOW: Delta {}ms fits LLM reflection loop", dt));
+                indicators.push(format!(
+                    "TIMING_WINDOW: Delta {}ms fits LLM reflection loop",
+                    dt
+                ));
             } else if dt < 40 && history.len() >= 2 {
                 score += 0.20;
-                indicators.push(format!("TIMING_BURST: High-rate automated flood ({}ms)", dt));
+                indicators.push(format!(
+                    "TIMING_BURST: High-rate automated flood ({}ms)",
+                    dt
+                ));
             }
         }
 
@@ -77,7 +79,7 @@ impl AsaAnalyzer {
                 if status == 403 || status == 422 || status == 500 {
                     // Check if current request follows an error in the agent thinking window
                     if let Some(dt) = delta_ms {
-                        if dt >= 1000 && dt <= 10000 {
+                        if (1000..=10000).contains(&dt) {
                             score += 0.40;
                             indicators.push(format!(
                                 "ADAPTIVE_MUTATION: Rapid retry after HTTP {} within {}ms thinking window",
@@ -126,13 +128,19 @@ mod tests {
         );
         assert!(assessment.is_autonomous_agent);
         assert!(assessment.anomaly_score >= 0.45);
-        assert!(assessment.indicators.iter().any(|i| i.contains("STRUCTURAL_RECON")));
+        assert!(assessment
+            .indicators
+            .iter()
+            .any(|i| i.contains("STRUCTURAL_RECON")));
     }
 
     #[test]
     fn test_php_cgi_argument_injection_blocked() {
         let history = vec![];
-        let headers = vec![("PHP_VALUE".to_string(), "auto_prepend_file=php://input".to_string())];
+        let headers = vec![(
+            "PHP_VALUE".to_string(),
+            "auto_prepend_file=php://input".to_string(),
+        )];
         let assessment = AsaAnalyzer::assess(
             "/index.php",
             Some("-d+allow_url_include=on"),
@@ -143,14 +151,19 @@ mod tests {
         );
         assert_eq!(assessment.recommended_action, DefensiveAction::BlockProof);
         assert!(assessment.anomaly_score >= 0.80);
-        assert!(assessment.indicators.iter().any(|i| i.contains("PHP_CGI_ARG_INJECTION")));
-        assert!(assessment.indicators.iter().any(|i| i.contains("PHP_ENV_POLLUTION")));
+        assert!(assessment
+            .indicators
+            .iter()
+            .any(|i| i.contains("PHP_CGI_ARG_INJECTION")));
+        assert!(assessment
+            .indicators
+            .iter()
+            .any(|i| i.contains("PHP_ENV_POLLUTION")));
     }
 
     #[test]
     fn test_adaptive_mutation_window() {
-        let mut history = vec![];
-        history.push(RequestSnapshot {
+        let history = vec![RequestSnapshot {
             timestamp_utc: "2026-10-22T20:00:00Z".to_string(),
             method: "POST".to_string(),
             path: "/api/chat".to_string(),
@@ -159,18 +172,14 @@ mod tests {
             payload_size: 100,
             response_status: Some(403),
             delta_prev_ms: None,
-        });
+        }];
 
         // 3200ms reflection delay by an agent
-        let assessment = AsaAnalyzer::assess(
-            "/api/chat",
-            None,
-            &[],
-            None,
-            Some(3200),
-            &history,
-        );
+        let assessment = AsaAnalyzer::assess("/api/chat", None, &[], None, Some(3200), &history);
         assert!(assessment.anomaly_score >= 0.6);
-        assert!(assessment.indicators.iter().any(|i| i.contains("ADAPTIVE_MUTATION")));
+        assert!(assessment
+            .indicators
+            .iter()
+            .any(|i| i.contains("ADAPTIVE_MUTATION")));
     }
 }

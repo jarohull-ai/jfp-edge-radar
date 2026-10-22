@@ -37,7 +37,10 @@ impl OsFirewallMitigation {
         }
 
         if self.is_whitelisted(&ip) {
-            warn!("Mitigation skipped: IP {} is whitelisted (loopback/private)", ip);
+            warn!(
+                "Mitigation skipped: IP {} is whitelisted (loopback/private)",
+                ip
+            );
             return Ok(false);
         }
 
@@ -118,7 +121,10 @@ impl OsFirewallMitigation {
             let _ = Command::new("iptables")
                 .args(["-D", "INPUT", "-s", &ip_str, "-j", "DROP"])
                 .output();
-            info!("OS FIREWALL: Quarantine TTL expired for IP {}, unbanned from iptables", ip);
+            info!(
+                "OS FIREWALL: Quarantine TTL expired for IP {}, unbanned from iptables",
+                ip
+            );
         }
 
         expired
@@ -154,7 +160,9 @@ mod tests {
     fn test_active_bans_ttl_pruning() {
         let mitigation = OsFirewallMitigation::new(true, 0); // Immediate expiration
         let ip: IpAddr = "198.51.100.99".parse().unwrap();
-        mitigation.active_bans.insert(ip, Instant::now() - Duration::from_secs(1));
+        mitigation
+            .active_bans
+            .insert(ip, Instant::now() - Duration::from_secs(1));
 
         assert_eq!(mitigation.active_bans_count(), 1);
         let pruned = mitigation.prune_expired_bans();

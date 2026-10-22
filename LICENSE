@@ -1,0 +1,49 @@
+JFP COMMUNITY & ENTERPRISE COMMERCIAL SHIELD LICENSE v1.0
+================================================================================
+Copyright (c) 2026 JARO / jarohull-ai & The JFP Project Contributors.
+All rights reserved.
+
+Permission is hereby granted, free of charge, to any person or organization 
+obtaining a copy of this software and associated documentation files 
+(the "Software"), to deal in the Software without restriction, including without 
+limitation the rights to use, copy, modify, merge, publish, distribute, 
+sublicense, and/or run copies of the Software in personal, research, defensive, 
+or production environments, SUBJECT EXCLUSIVELY TO THE FOLLOWING REVENUE THRESHOLD:
+
+1. FREE DEFENSIVE USE TIER (< $10,000,000 USD Annual Revenue):
+   The Software is 100% FREE for:
+   a) Individuals, private persons, independent security researchers, and students.
+   b) Non-profit, charitable, and educational organizations.
+   c) Any commercial enterprise, startup, company, or corporate entity (including 
+      affiliates and subsidiaries) whose aggregated annual gross revenue is 
+      STRICTLY LESS THAN TEN MILLION UNITED STATES DOLLARS ($10,000,000 USD).
+
+   Purpose: Critical defensive tools against autonomous botnets and exploits must 
+   be universally available to protect infrastructure, open networks, and community 
+   systems worldwide without barrier.
+
+2. ENTERPRISE COMMERCIAL LICENSE REQUIREMENT (>= $10,000,000 USD Annual Revenue):
+   Any commercial business entity, corporation, enterprise, financial institution, 
+   or cloud provider whose aggregate annual gross revenue (including all global 
+   parent companies, subsidiaries, and controlled affiliates) EQUALS OR EXCEEDS 
+   TEN MILLION UNITED STATES DOLLARS ($10,000,000 USD) must obtain a separate, 
+   active Commercial Enterprise License from JARO before running, integrating, or 
+   deploying the Software in production or offering services derived from it.
+
+   To obtain an enterprise license agreement, contact:
+   - Email: licensing@jarohull.ai (or open an inquiry via repository maintainers)
+   - Organization: JARO Flash Protocol Project (JFP)
+
+3. NOTICE AND ATTRIBUTION:
+   The above copyright notice and this permission notice must be included in all 
+   copies or substantial portions of the Software, documentation, and redistributions.
+
+4. DISCLAIMER OF WARRANTY & LIMITATION OF LIABILITY:
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR 
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
+   FITNESS FOR A PARTICULAR PURPOSE, TITLE, AND NONINFRINGEMENT. IN NO EVENT SHALL 
+   THE AUTHORS, COPYRIGHT HOLDERS, OR CONTRIBUTORS BE LIABLE FOR ANY CLAIM, DAMAGES, 
+   OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE, 
+   ARISING FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
+   DEALINGS IN THE SOFTWARE.
+================================================================================

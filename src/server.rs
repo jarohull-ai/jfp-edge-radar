@@ -67,8 +67,14 @@ impl RadarServer {
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let local_addr = listener.local_addr()?;
         info!("JFP-Paradox Edge Radar v0.4.0 listening on {}", local_addr);
-        info!("State Bounded Capacity: {} max IP sessions", self.config.max_sessions_capacity);
-        info!("Tarpit FD Concurrency Cap: {} max sockets", self.config.max_tarpit_concurrency);
+        info!(
+            "State Bounded Capacity: {} max IP sessions",
+            self.config.max_sessions_capacity
+        );
+        info!(
+            "Tarpit FD Concurrency Cap: {} max sockets",
+            self.config.max_tarpit_concurrency
+        );
 
         if self.config.dry_run {
             warn!("OPERATIONAL MODE: DRY-RUN / AUDIT ACTIVE (simulating mitigations without dropping)");
@@ -107,7 +113,10 @@ impl RadarServer {
                 interval.tick().await;
                 let unbanned = mitigation_cleaner.prune_expired_bans();
                 if !unbanned.is_empty() {
-                    info!("Unbanned {} expired IP addresses from OS firewall table", unbanned.len());
+                    info!(
+                        "Unbanned {} expired IP addresses from OS firewall table",
+                        unbanned.len()
+                    );
                 }
             }
         });
@@ -168,6 +177,7 @@ impl RadarServer {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn handle_request(
     req: Request<Incoming>,
     remote_addr: SocketAddr,
@@ -186,7 +196,10 @@ async fn handle_request(
 
     // 1. PROTOCOL AMBIGUITY & SMUGGLING SHIELD
     if let Err(violation) = CanonicalShield::inspect_headers(req.headers()) {
-        warn!("SMUGGLING SHIELD TRIGGERED: IP {} violation: {:?}", client_ip, violation);
+        warn!(
+            "SMUGGLING SHIELD TRIGGERED: IP {} violation: {:?}",
+            client_ip, violation
+        );
         let _ = proof_logger.log_event(
             "PROTOCOL_SMUGGLING_ATTEMPT_BLOCKED",
             &client_ip.to_string(),
@@ -206,10 +219,15 @@ async fn handle_request(
     let raw_query = req.uri().query();
 
     // 2. CANONICAL MULTI-PASS URL DECODING & NORMALIZATION
-    let (canonical_path, canonical_query) = match CanonicalShield::canonicalize_uri(raw_path, raw_query) {
+    let (canonical_path, canonical_query) = match CanonicalShield::canonicalize_uri(
+        raw_path, raw_query,
+    ) {
         Ok(res) => res,
         Err(violation) => {
-            warn!("EVASION SHIELD TRIGGERED: IP {} multi-pass evasion: {:?}", client_ip, violation);
+            warn!(
+                "EVASION SHIELD TRIGGERED: IP {} multi-pass evasion: {:?}",
+                client_ip, violation
+            );
             let _ = proof_logger.log_event(
                 "DOUBLE_ENCODING_EVASION_BLOCKED",
                 &client_ip.to_string(),
@@ -329,20 +347,18 @@ async fn handle_request(
     }
 
     let response: Response<RadarResponseBody> = match assessment.recommended_action {
-        DefensiveAction::BlockProof => {
-            enforce_block(
-                &proof_logger,
-                &tracker,
-                &mitigation,
-                client_ip,
-                peer_ip,
-                path,
-                method.as_str(),
-                query,
-                delta_ms,
-                assessment,
-            )
-        }
+        DefensiveAction::BlockProof => enforce_block(
+            &proof_logger,
+            &tracker,
+            &mitigation,
+            client_ip,
+            peer_ip,
+            path,
+            method.as_str(),
+            query,
+            delta_ms,
+            assessment,
+        ),
         DefensiveAction::DeceiveHoney => {
             let _ = proof_logger.log_event(
                 "ASA_HONEY_DECEPTION_SERVED",
@@ -402,11 +418,8 @@ async fn handle_request(
                 tracker.track_response(client_ip, 200);
 
                 // Infinite Slow-Drip Tarpit with RAII Drop descriptor counter
-                let slow_body = SlowDripBody::new(
-                    tarpit_drip_interval,
-                    1200,
-                    Arc::clone(&active_tarpits),
-                );
+                let slow_body =
+                    SlowDripBody::new(tarpit_drip_interval, 1200, Arc::clone(&active_tarpits));
                 let boxed_body = slow_body.map_err(|e| match e {}).boxed();
 
                 Response::builder()
@@ -454,6 +467,7 @@ async fn handle_request(
     Ok(response)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn enforce_block(
     proof_logger: &ProofLogger,
     tracker: &SessionTracker,
@@ -498,9 +512,7 @@ fn enforce_block(
 }
 
 fn box_full(bytes: Bytes) -> RadarResponseBody {
-    Full::new(bytes)
-        .map_err(|e| match e {})
-        .boxed()
+    Full::new(bytes).map_err(|e| match e {}).boxed()
 }
 
 /// Forwards verified clean requests to the upstream backend service.
@@ -521,9 +533,7 @@ async fn forward_to_upstream(
         }
     });
 
-    let mut proxy_req = Request::builder()
-        .method(parts.method)
-        .uri(parts.uri);
+    let mut proxy_req = Request::builder().method(parts.method).uri(parts.uri);
 
     for (k, v) in parts.headers.iter() {
         if k != "host" {

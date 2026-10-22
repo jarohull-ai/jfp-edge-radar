@@ -1,0 +1,35 @@
+name: Build & Publish Release Artifacts
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-release:
+    name: Build Linux Release Binary
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build Optimized Release Binary
+        run: cargo build --release --locked
+
+      - name: Package Binary Artifact
+        run: |
+          mkdir -p dist
+          cp target/release/jfp-edge-radar dist/
+          tar -czf dist/jfp-edge-radar-linux-x86_64.tar.gz -C dist jfp-edge-radar
+
+      - name: Upload Artifacts to Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: dist/jfp-edge-radar-linux-x86_64.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

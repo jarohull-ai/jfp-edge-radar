@@ -65,7 +65,10 @@ async fn test_radar_reverse_proxy_and_attack_interception() {
     let client_send = |path: &str, headers: &[(&str, &str)]| {
         let addr = radar_addr;
         let p = path.to_string();
-        let h: Vec<(String, String)> = headers.iter().map(|(a, b)| (a.to_string(), b.to_string())).collect();
+        let h: Vec<(String, String)> = headers
+            .iter()
+            .map(|(a, b)| (a.to_string(), b.to_string()))
+            .collect();
         async move {
             let mut stream = None;
             for _ in 0..20 {
@@ -76,7 +79,9 @@ async fn test_radar_reverse_proxy_and_attack_interception() {
                 tokio::time::sleep(Duration::from_millis(50)).await;
             }
             let s = stream.expect("Failed to connect to radar gateway");
-            let (mut sender, conn) = hyper::client::conn::http1::handshake(TokioIo::new(s)).await.unwrap();
+            let (mut sender, conn) = hyper::client::conn::http1::handshake(TokioIo::new(s))
+                .await
+                .unwrap();
             tokio::spawn(async move {
                 let _ = conn.await;
             });
@@ -99,7 +104,11 @@ async fn test_radar_reverse_proxy_and_attack_interception() {
     );
 
     // 4. Test malicious PHP-2-Shell / PHP-CGI injection request -> MUST be intercepted by Radar with 403
-    let attack_resp = client_send("/index.php?-d+allow_url_include=on", &[("PHP_VALUE", "auto_prepend_file=php://input")]).await;
+    let attack_resp = client_send(
+        "/index.php?-d+allow_url_include=on",
+        &[("PHP_VALUE", "auto_prepend_file=php://input")],
+    )
+    .await;
     assert_eq!(attack_resp.status(), StatusCode::FORBIDDEN);
     assert!(attack_resp.headers().contains_key("x-jfp-proof-hash"));
 
@@ -108,7 +117,6 @@ async fn test_radar_reverse_proxy_and_attack_interception() {
     assert!(log_content.contains("ASA_ATTACK_BLOCKED"));
     assert!(log_content.contains("PHP_CGI_ARG_INJECTION"));
 }
-
 
 #[tokio::test]
 async fn test_radar_dry_run_audit_mode() {
@@ -127,7 +135,9 @@ async fn test_radar_dry_run_audit_mode() {
                                 Ok::<_, hyper::Error>(
                                     Response::builder()
                                         .status(StatusCode::OK)
-                                        .body(Full::new(Bytes::from(r#"{"status":"backend_allowed"}"#)))
+                                        .body(Full::new(Bytes::from(
+                                            r#"{"status":"backend_allowed"}"#,
+                                        )))
                                         .unwrap(),
                                 )
                             }),
@@ -159,7 +169,9 @@ async fn test_radar_dry_run_audit_mode() {
 
     // Send attack payload - in dry-run mode, it should NOT return 403, but forward to backend and log audit
     let stream = tokio::net::TcpStream::connect(radar_addr).await.unwrap();
-    let (mut sender, conn) = hyper::client::conn::http1::handshake(TokioIo::new(stream)).await.unwrap();
+    let (mut sender, conn) = hyper::client::conn::http1::handshake(TokioIo::new(stream))
+        .await
+        .unwrap();
     tokio::spawn(async move {
         let _ = conn.await;
     });
@@ -177,7 +189,6 @@ async fn test_radar_dry_run_audit_mode() {
     let log_content = std::fs::read_to_string(tmp_proof.path()).unwrap();
     assert!(log_content.contains("ASA_ATTACK_SIMULATED_DRY_RUN"));
 }
-
 
 #[tokio::test]
 async fn test_radar_slow_drip_tarpit() {
@@ -201,7 +212,9 @@ async fn test_radar_slow_drip_tarpit() {
 
     // Connect and send a request that triggers Tarpit (e.g. PHP probe scoring ~0.35)
     let stream = tokio::net::TcpStream::connect(radar_addr).await.unwrap();
-    let (mut sender, conn) = hyper::client::conn::http1::handshake(TokioIo::new(stream)).await.unwrap();
+    let (mut sender, conn) = hyper::client::conn::http1::handshake(TokioIo::new(stream))
+        .await
+        .unwrap();
     tokio::spawn(async move {
         let _ = conn.await;
     });
@@ -223,7 +236,6 @@ async fn test_radar_slow_drip_tarpit() {
     let frame = body.frame().await.unwrap().unwrap();
     assert!(frame.is_data());
 }
-
 
 #[tokio::test]
 async fn test_radar_tarpit_concurrency_cap_fallback() {
@@ -249,7 +261,9 @@ async fn test_radar_tarpit_concurrency_cap_fallback() {
 
     // 1st request from IP A -> acquires the 1 available Tarpit slot
     let stream1 = tokio::net::TcpStream::connect(radar_addr).await.unwrap();
-    let (mut sender1, conn1) = hyper::client::conn::http1::handshake(TokioIo::new(stream1)).await.unwrap();
+    let (mut sender1, conn1) = hyper::client::conn::http1::handshake(TokioIo::new(stream1))
+        .await
+        .unwrap();
     tokio::spawn(async move {
         let _ = conn1.await;
     });
@@ -260,11 +274,16 @@ async fn test_radar_tarpit_concurrency_cap_fallback() {
         .body(Full::new(Bytes::new()))
         .unwrap();
     let resp1 = sender1.send_request(req1).await.unwrap();
-    assert_eq!(resp1.headers().get("x-jfp-defense").unwrap(), "slow-drip-tarpit");
+    assert_eq!(
+        resp1.headers().get("x-jfp-defense").unwrap(),
+        "slow-drip-tarpit"
+    );
 
     // 2nd request from IP B while 1st is still active -> must hit concurrency cap and fallback immediately to 403 Forbidden!
     let stream2 = tokio::net::TcpStream::connect(radar_addr).await.unwrap();
-    let (mut sender2, conn2) = hyper::client::conn::http1::handshake(TokioIo::new(stream2)).await.unwrap();
+    let (mut sender2, conn2) = hyper::client::conn::http1::handshake(TokioIo::new(stream2))
+        .await
+        .unwrap();
     tokio::spawn(async move {
         let _ = conn2.await;
     });

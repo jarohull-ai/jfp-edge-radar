@@ -62,15 +62,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         config.proof_log_max_bytes = max_bytes.parse().expect("Invalid RADAR_PROOF_MAX_BYTES");
     }
     if let Ok(max_sess) = std::env::var("RADAR_MAX_SESSIONS_CAPACITY") {
-        config.max_sessions_capacity = max_sess.parse().expect("Invalid RADAR_MAX_SESSIONS_CAPACITY");
+        config.max_sessions_capacity = max_sess
+            .parse()
+            .expect("Invalid RADAR_MAX_SESSIONS_CAPACITY");
     }
     if let Ok(max_tarpit) = std::env::var("RADAR_MAX_TARPIT_SESSIONS") {
-        config.max_tarpit_concurrency = max_tarpit.parse().expect("Invalid RADAR_MAX_TARPIT_SESSIONS");
+        config.max_tarpit_concurrency = max_tarpit
+            .parse()
+            .expect("Invalid RADAR_MAX_TARPIT_SESSIONS");
     }
-    if std::env::var("RADAR_DRY_RUN").map(|v| v == "1" || v.eq_ignore_ascii_case("true")).unwrap_or(false) {
+    if std::env::var("RADAR_DRY_RUN")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+    {
         config.dry_run = true;
     }
-    if std::env::var("RADAR_ENABLE_IPTABLES").map(|v| v == "1" || v.eq_ignore_ascii_case("true")).unwrap_or(false) {
+    if std::env::var("RADAR_ENABLE_IPTABLES")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+    {
         config.enable_os_firewall_drop = true;
     }
     if let Ok(ttl) = std::env::var("RADAR_BAN_TTL_SECS") {
@@ -87,7 +97,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     server.run().await
 }
 
-fn run_report_subcommand(subargs: &[String]) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+fn run_report_subcommand(
+    subargs: &[String],
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut log_path = PathBuf::from("/var/log/jfp/asa_radar_proof.jsonl");
     let mut out_path = None;
 
@@ -109,8 +121,8 @@ fn run_report_subcommand(subargs: &[String]) -> Result<(), Box<dyn std::error::E
     println!("Analyzing proof log: {}", log_path.display());
     println!("============================================================");
 
-    let stats = ForensicReporter::analyze_log(&log_path)
-        .map_err(|e| format!("Forensics error: {}", e))?;
+    let stats =
+        ForensicReporter::analyze_log(&log_path).map_err(|e| format!("Forensics error: {}", e))?;
 
     let report_content = ForensicReporter::generate_markdown_report(&stats, &log_path);
 

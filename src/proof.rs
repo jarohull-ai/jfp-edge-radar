@@ -33,7 +33,11 @@ struct ProofState {
 }
 
 impl ProofLogger {
-    pub fn new(log_path: PathBuf, seed_hash: Option<String>, max_segment_bytes: Option<u64>) -> Self {
+    pub fn new(
+        log_path: PathBuf,
+        seed_hash: Option<String>,
+        max_segment_bytes: Option<u64>,
+    ) -> Self {
         if let Some(parent) = log_path.parent() {
             let _ = std::fs::create_dir_all(parent);
         }
@@ -128,7 +132,10 @@ impl ProofLogger {
                 seal_map.insert("counter".to_string(), serde_json::json!(counter));
                 seal_map.insert("prev_hash".to_string(), serde_json::json!(prev_hash));
                 seal_map.insert("timestamp".to_string(), serde_json::json!(timestamp));
-                seal_map.insert("event_type".to_string(), serde_json::json!("PROOF_SEGMENT_SEAL"));
+                seal_map.insert(
+                    "event_type".to_string(),
+                    serde_json::json!("PROOF_SEGMENT_SEAL"),
+                );
                 seal_map.insert("ip".to_string(), serde_json::json!("127.0.0.1"));
                 seal_map.insert(
                     "payload_summary".to_string(),
@@ -149,6 +156,7 @@ impl ProofLogger {
                 let mut new_file = OpenOptions::new()
                     .create(true)
                     .write(true)
+                    .truncate(true)
                     .open(&self.log_path)
                     .map_err(|e| e.to_string())?;
 
@@ -173,12 +181,20 @@ mod tests {
         let logger = ProofLogger::new(tmp.path().to_path_buf(), None, None);
 
         let rec1 = logger
-            .log_event("TEST_EVENT_1", "10.0.0.1", serde_json::json!({"action": "probe"}))
+            .log_event(
+                "TEST_EVENT_1",
+                "10.0.0.1",
+                serde_json::json!({"action": "probe"}),
+            )
             .unwrap();
         assert_eq!(rec1.counter, 0);
 
         let rec2 = logger
-            .log_event("TEST_EVENT_2", "10.0.0.1", serde_json::json!({"action": "blocked"}))
+            .log_event(
+                "TEST_EVENT_2",
+                "10.0.0.1",
+                serde_json::json!({"action": "blocked"}),
+            )
             .unwrap();
         assert_eq!(rec2.counter, 1);
         assert_eq!(rec2.prev_hash, rec1.entry_hash);
@@ -197,12 +213,20 @@ mod tests {
         let logger = ProofLogger::new(log_file.clone(), None, Some(300));
 
         let _rec1 = logger
-            .log_event("EVENT_A", "10.0.0.1", serde_json::json!({"data": "payload_1"}))
+            .log_event(
+                "EVENT_A",
+                "10.0.0.1",
+                serde_json::json!({"data": "payload_1"}),
+            )
             .unwrap();
 
         // This second event will trigger rotation before writing
         let rec2 = logger
-            .log_event("EVENT_B", "10.0.0.1", serde_json::json!({"data": "payload_2"}))
+            .log_event(
+                "EVENT_B",
+                "10.0.0.1",
+                serde_json::json!({"data": "payload_2"}),
+            )
             .unwrap();
 
         // Check that rotated segment exists

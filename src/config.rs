@@ -27,13 +27,13 @@ impl Default for RadarConfig {
             proof_log_path: PathBuf::from("/var/log/jfp/asa_radar_proof.jsonl"),
             proof_log_max_bytes: 10 * 1024 * 1024, // 10 MB
             max_session_idle_secs: 300,
-            max_sessions_capacity: 131_072,        // 128k bounded sessions limit
+            max_sessions_capacity: 131_072, // 128k bounded sessions limit
             enable_honey_tokens: true,
             dry_run: false,
             enable_os_firewall_drop: false,
-            ban_ttl_secs: 3600,                    // 1 hour ban TTL
-            tarpit_drip_interval_ms: 3000,        // 1 byte every 3 seconds
-            max_tarpit_concurrency: 512,           // Max 512 active Tarpit file descriptors
+            ban_ttl_secs: 3600,            // 1 hour ban TTL
+            tarpit_drip_interval_ms: 3000, // 1 byte every 3 seconds
+            max_tarpit_concurrency: 512,   // Max 512 active Tarpit file descriptors
             trusted_proxies: Vec::new(),
         }
     }

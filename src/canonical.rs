@@ -38,11 +38,15 @@ impl CanonicalShield {
         for (k, v) in headers.iter() {
             let k_str = k.as_str();
             if k_str.contains('\0') || k_str.contains('\r') || k_str.contains('\n') {
-                return Err(AmbiguityViolation::ControlCharacterInHeader(k_str.to_string()));
+                return Err(AmbiguityViolation::ControlCharacterInHeader(
+                    k_str.to_string(),
+                ));
             }
             if let Ok(val) = v.to_str() {
                 if val.contains('\0') || val.contains('\r') || val.contains('\n') {
-                    return Err(AmbiguityViolation::ControlCharacterInHeader(k_str.to_string()));
+                    return Err(AmbiguityViolation::ControlCharacterInHeader(
+                        k_str.to_string(),
+                    ));
                 }
             }
         }
@@ -52,7 +56,10 @@ impl CanonicalShield {
 
     /// Performs multi-pass (Fixed-Point) URL decoding and path canonicalization.
     /// Returns the canonical path and query, or fails if multi-layered evasion is detected.
-    pub fn canonicalize_uri(path: &str, query: Option<&str>) -> Result<(String, Option<String>), AmbiguityViolation> {
+    pub fn canonicalize_uri(
+        path: &str,
+        query: Option<&str>,
+    ) -> Result<(String, Option<String>), AmbiguityViolation> {
         let (canonical_path, path_double_encoded) = multi_pass_url_decode(path);
         let (canonical_query, query_double_encoded) = match query {
             Some(q) => {
@@ -63,10 +70,14 @@ impl CanonicalShield {
         };
 
         if path_double_encoded {
-            return Err(AmbiguityViolation::DoubleUrlEncodingDetected(path.to_string()));
+            return Err(AmbiguityViolation::DoubleUrlEncodingDetected(
+                path.to_string(),
+            ));
         }
         if query_double_encoded {
-            return Err(AmbiguityViolation::DoubleUrlEncodingDetected(query.unwrap_or("").to_string()));
+            return Err(AmbiguityViolation::DoubleUrlEncodingDetected(
+                query.unwrap_or("").to_string(),
+            ));
         }
 
         // Normalize path slashes: multiple consecutive slashes collapsed, resolve '.' and '..'
@@ -177,7 +188,10 @@ mod tests {
         let query = Some("%252dallow_url_include=1");
 
         let res = CanonicalShield::canonicalize_uri(uri, query);
-        assert!(matches!(res, Err(AmbiguityViolation::DoubleUrlEncodingDetected(_))));
+        assert!(matches!(
+            res,
+            Err(AmbiguityViolation::DoubleUrlEncodingDetected(_))
+        ));
     }
 
     #[test]
