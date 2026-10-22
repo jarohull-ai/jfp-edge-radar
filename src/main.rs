@@ -11,6 +11,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         run_report_subcommand(&args[2..])?;
         return Ok(());
     }
+    if args.len() > 1 && args[1] == "monitor" {
+        let mut log_path = PathBuf::from("/var/log/jfp/asa_radar_proof.jsonl");
+        if let Ok(path) = std::env::var("RADAR_PROOF_LOG") {
+            log_path = PathBuf::from(path);
+        }
+        let mut i = 2;
+        while i < args.len() {
+            if args[i] == "--log" && i + 1 < args.len() {
+                log_path = PathBuf::from(&args[i + 1]);
+                i += 2;
+            } else {
+                i += 1;
+            }
+        }
+        jfp_edge_radar::TerminalMonitor::run(&log_path, std::time::Duration::from_secs(1)).await?;
+        return Ok(());
+    }
 
     tracing_subscriber::fmt()
         .with_env_filter(
