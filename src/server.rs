@@ -1,4 +1,5 @@
-use crate::analyzer::{AsaAnalyzer, DefensiveAction};
+use crate::analyzer::{AsaAnalyzer, DefensiveAction, ThreatAssessment};
+use crate::canonical::CanonicalShield;
 use crate::config::RadarConfig;
 use crate::ip_extractor::ClientIpExtractor;
 use crate::mitigation::OsFirewallMitigation;
@@ -13,6 +14,7 @@ use hyper::service::service_fn;
 use hyper::{Request, Response, StatusCode};
 use hyper_util::rt::TokioIo;
 use std::net::SocketAddr;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::{TcpListener, TcpStream};
@@ -26,11 +28,12 @@ pub struct RadarServer {
     proof_logger: Arc<ProofLogger>,
     ip_extractor: Arc<ClientIpExtractor>,
     mitigation: Arc<OsFirewallMitigation>,
+    active_tarpits: Arc<AtomicUsize>,
 }
 
 impl RadarServer {
     pub fn new(config: RadarConfig) -> Self {
-        let tracker = Arc::new(SessionTracker::new());
+        let tracker = Arc::new(SessionTracker::with_capacity(config.max_sessions_capacity));
         let proof_logger = Arc::new(ProofLogger::new(
             config.proof_log_path.clone(),
             None,
@@ -41,6 +44,7 @@ impl RadarServer {
             config.enable_os_firewall_drop,
             config.ban_ttl_secs,
         ));
+        let active_tarpits = Arc::new(AtomicUsize::new(0));
 
         Self {
             config,
@@ -48,6 +52,7 @@ impl RadarServer {
             proof_logger,
             ip_extractor,
             mitigation,
+            active_tarpits,
         }
     }
 
@@ -61,7 +66,10 @@ impl RadarServer {
         listener: TcpListener,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let local_addr = listener.local_addr()?;
-        info!("JFP-Paradox Edge Radar listening on {}", local_addr);
+        info!("JFP-Paradox Edge Radar v0.4.0 listening on {}", local_addr);
+        info!("State Bounded Capacity: {} max IP sessions", self.config.max_sessions_capacity);
+        info!("Tarpit FD Concurrency Cap: {} max sockets", self.config.max_tarpit_concurrency);
+
         if self.config.dry_run {
             warn!("OPERATIONAL MODE: DRY-RUN / AUDIT ACTIVE (simulating mitigations without dropping)");
         }
@@ -118,9 +126,11 @@ impl RadarServer {
             let proof_logger = Arc::clone(&self.proof_logger);
             let ip_extractor = Arc::clone(&self.ip_extractor);
             let mitigation = Arc::clone(&self.mitigation);
+            let active_tarpits = Arc::clone(&self.active_tarpits);
             let upstream_addr = self.config.upstream_addr;
             let dry_run = self.config.dry_run;
             let drip_interval = Duration::from_millis(self.config.tarpit_drip_interval_ms);
+            let max_tarpit_concurrency = self.config.max_tarpit_concurrency;
 
             tokio::spawn(async move {
                 let service = service_fn(move |req: Request<Incoming>| {
@@ -128,6 +138,7 @@ impl RadarServer {
                     let proof_logger = Arc::clone(&proof_logger);
                     let ip_extractor = Arc::clone(&ip_extractor);
                     let mitigation = Arc::clone(&mitigation);
+                    let active_tarpits = Arc::clone(&active_tarpits);
                     async move {
                         handle_request(
                             req,
@@ -136,9 +147,11 @@ impl RadarServer {
                             proof_logger,
                             ip_extractor,
                             mitigation,
+                            active_tarpits,
                             upstream_addr,
                             dry_run,
                             drip_interval,
+                            max_tarpit_concurrency,
                         )
                         .await
                     }
@@ -162,18 +175,61 @@ async fn handle_request(
     proof_logger: Arc<ProofLogger>,
     ip_extractor: Arc<ClientIpExtractor>,
     mitigation: Arc<OsFirewallMitigation>,
+    active_tarpits: Arc<AtomicUsize>,
     upstream_addr: Option<SocketAddr>,
     dry_run: bool,
     tarpit_drip_interval: Duration,
+    max_tarpit_concurrency: usize,
 ) -> Result<Response<RadarResponseBody>, hyper::Error> {
     let peer_ip = remote_addr.ip();
-    // Anti-spoofing Real Client IP extraction (Cloudflare / Nginx / ALB)
     let client_ip = ip_extractor.extract_real_ip(peer_ip, req.headers());
 
+    // 1. PROTOCOL AMBIGUITY & SMUGGLING SHIELD
+    if let Err(violation) = CanonicalShield::inspect_headers(req.headers()) {
+        warn!("SMUGGLING SHIELD TRIGGERED: IP {} violation: {:?}", client_ip, violation);
+        let _ = proof_logger.log_event(
+            "PROTOCOL_SMUGGLING_ATTEMPT_BLOCKED",
+            &client_ip.to_string(),
+            serde_json::json!({
+                "violation": format!("{:?}", violation),
+                "peer_ip": peer_ip.to_string(),
+            }),
+        );
+        let _ = mitigation.drop_ip(client_ip);
+        return Ok(Response::builder()
+            .status(StatusCode::BAD_REQUEST)
+            .body(box_full(Bytes::from(r#"{"error":"Bad Request","reason":"HTTP Protocol Ambiguity / Smuggling rejected by JFP Shield"}"#)))
+            .unwrap());
+    }
+
+    let raw_path = req.uri().path();
+    let raw_query = req.uri().query();
+
+    // 2. CANONICAL MULTI-PASS URL DECODING & NORMALIZATION
+    let (canonical_path, canonical_query) = match CanonicalShield::canonicalize_uri(raw_path, raw_query) {
+        Ok(res) => res,
+        Err(violation) => {
+            warn!("EVASION SHIELD TRIGGERED: IP {} multi-pass evasion: {:?}", client_ip, violation);
+            let _ = proof_logger.log_event(
+                "DOUBLE_ENCODING_EVASION_BLOCKED",
+                &client_ip.to_string(),
+                serde_json::json!({
+                    "raw_path": raw_path,
+                    "raw_query": raw_query,
+                    "violation": format!("{:?}", violation),
+                }),
+            );
+            let _ = mitigation.drop_ip(client_ip);
+            return Ok(Response::builder()
+                .status(StatusCode::BAD_REQUEST)
+                .body(box_full(Bytes::from(r#"{"error":"Bad Request","reason":"Multi-layered encoding evasion rejected by JFP Shield"}"#)))
+                .unwrap());
+        }
+    };
+
     let method = req.method().clone();
-    let uri = req.uri().clone();
-    let path = uri.path();
-    let query = uri.query();
+    let path = canonical_path.as_str();
+    let query = canonical_query.as_deref();
 
     // Extract headers for ASA & PHP exploit inspection
     let mut header_pairs = Vec::new();
@@ -250,7 +306,6 @@ async fn handle_request(
             assessment.recommended_action, client_ip, assessment.indicators
         );
 
-        // In dry run, forward to upstream or allow
         if let Some(upstream) = upstream_addr {
             let mut resp = match forward_to_upstream(upstream, parts, body_bytes, client_ip).await {
                 Ok(r) => r,
@@ -275,37 +330,18 @@ async fn handle_request(
 
     let response: Response<RadarResponseBody> = match assessment.recommended_action {
         DefensiveAction::BlockProof => {
-            let proof = proof_logger.log_event(
-                "ASA_ATTACK_BLOCKED",
-                &client_ip.to_string(),
-                serde_json::json!({
-                    "path": path,
-                    "method": method.as_str(),
-                    "query": query,
-                    "peer_ip": peer_ip.to_string(),
-                    "delta_ms": delta_ms,
-                    "threat_assessment": assessment,
-                }),
-            );
-
-            tracker.track_response(client_ip, 403);
-
-            // Trigger OS Kernel Firewall Drop (iptables) with TTL
-            let _ = mitigation.drop_ip(client_ip);
-
-            let mut builder = Response::builder()
-                .status(StatusCode::FORBIDDEN)
-                .header("content-type", "application/json");
-
-            if let Ok(p) = proof {
-                builder = builder.header("x-jfp-proof-hash", p.entry_hash);
-            }
-
-            builder
-                .body(box_full(Bytes::from(
-                    r#"{"error":"Forbidden","reason":"Threat blocked by JFP Edge Radar (ASA Engine)"}"#,
-                )))
-                .unwrap()
+            enforce_block(
+                &proof_logger,
+                &tracker,
+                &mitigation,
+                client_ip,
+                peer_ip,
+                path,
+                method.as_str(),
+                query,
+                delta_ms,
+                assessment,
+            )
         }
         DefensiveAction::DeceiveHoney => {
             let _ = proof_logger.log_event(
@@ -330,35 +366,59 @@ async fn handle_request(
                 .unwrap()
         }
         DefensiveAction::Tarpit(_delay_ms) => {
-            let _ = proof_logger.log_event(
-                "ASA_SLOW_DRIP_TARPIT_ENGAGED",
-                &client_ip.to_string(),
-                serde_json::json!({
-                    "path": path,
-                    "peer_ip": peer_ip.to_string(),
-                    "action": "slow_drip_chunked_stream",
-                    "threat_assessment": assessment,
-                }),
-            );
+            // 3. TARPIT FILE DESCRIPTOR EXHAUSTION GUARD
+            let current_active = active_tarpits.load(Ordering::Relaxed);
+            if current_active >= max_tarpit_concurrency {
+                // Hard cap reached: do NOT allocate more file descriptors. Fallback to immediate block!
+                warn!(
+                    "TARPIT CONCURRENCY CAP REACHED ({} active). Fallback to immediate BlockProof for IP {}",
+                    current_active, client_ip
+                );
+                enforce_block(
+                    &proof_logger,
+                    &tracker,
+                    &mitigation,
+                    client_ip,
+                    peer_ip,
+                    path,
+                    method.as_str(),
+                    query,
+                    delta_ms,
+                    assessment,
+                )
+            } else {
+                let _ = proof_logger.log_event(
+                    "ASA_SLOW_DRIP_TARPIT_ENGAGED",
+                    &client_ip.to_string(),
+                    serde_json::json!({
+                        "path": path,
+                        "peer_ip": peer_ip.to_string(),
+                        "action": "slow_drip_chunked_stream",
+                        "active_tarpits": current_active + 1,
+                        "threat_assessment": assessment,
+                    }),
+                );
 
-            tracker.track_response(client_ip, 200);
+                tracker.track_response(client_ip, 200);
 
-            // Infinite Slow-Drip Tarpit: send 1 byte every N seconds, trapping attacker sockets
-            let slow_body = SlowDripBody::new(tarpit_drip_interval, 1200);
-            let boxed_body = slow_body
-                .map_err(|e| match e {})
-                .boxed();
+                // Infinite Slow-Drip Tarpit with RAII Drop descriptor counter
+                let slow_body = SlowDripBody::new(
+                    tarpit_drip_interval,
+                    1200,
+                    Arc::clone(&active_tarpits),
+                );
+                let boxed_body = slow_body.map_err(|e| match e {}).boxed();
 
-            Response::builder()
-                .status(StatusCode::OK)
-                .header("content-type", "application/octet-stream")
-                .header("transfer-encoding", "chunked")
-                .header("x-jfp-defense", "slow-drip-tarpit")
-                .body(boxed_body)
-                .unwrap()
+                Response::builder()
+                    .status(StatusCode::OK)
+                    .header("content-type", "application/octet-stream")
+                    .header("transfer-encoding", "chunked")
+                    .header("x-jfp-defense", "slow-drip-tarpit")
+                    .body(boxed_body)
+                    .unwrap()
+            }
         }
         DefensiveAction::Allow => {
-            // Forward clean traffic to upstream if configured
             if let Some(upstream) = upstream_addr {
                 match forward_to_upstream(upstream, parts, body_bytes, client_ip).await {
                     Ok(resp) => {
@@ -384,7 +444,7 @@ async fn handle_request(
                     .status(StatusCode::OK)
                     .header("content-type", "application/json")
                     .body(box_full(Bytes::from(
-                        r#"{"status":"healthy","engine":"JFP-Paradox Edge Radar v0.3.0"}"#,
+                        r#"{"status":"healthy","engine":"JFP-Paradox Edge Radar v0.4.0"}"#,
                     )))
                     .unwrap()
             }
@@ -392,6 +452,49 @@ async fn handle_request(
     };
 
     Ok(response)
+}
+
+fn enforce_block(
+    proof_logger: &ProofLogger,
+    tracker: &SessionTracker,
+    mitigation: &OsFirewallMitigation,
+    client_ip: std::net::IpAddr,
+    peer_ip: std::net::IpAddr,
+    path: &str,
+    method: &str,
+    query: Option<&str>,
+    delta_ms: Option<u64>,
+    assessment: ThreatAssessment,
+) -> Response<RadarResponseBody> {
+    let proof = proof_logger.log_event(
+        "ASA_ATTACK_BLOCKED",
+        &client_ip.to_string(),
+        serde_json::json!({
+            "path": path,
+            "method": method,
+            "query": query,
+            "peer_ip": peer_ip.to_string(),
+            "delta_ms": delta_ms,
+            "threat_assessment": assessment,
+        }),
+    );
+
+    tracker.track_response(client_ip, 403);
+    let _ = mitigation.drop_ip(client_ip);
+
+    let mut builder = Response::builder()
+        .status(StatusCode::FORBIDDEN)
+        .header("content-type", "application/json");
+
+    if let Ok(p) = proof {
+        builder = builder.header("x-jfp-proof-hash", p.entry_hash);
+    }
+
+    builder
+        .body(box_full(Bytes::from(
+            r#"{"error":"Forbidden","reason":"Threat blocked by JFP Edge Radar (Hardened Shield)"}"#,
+        )))
+        .unwrap()
 }
 
 fn box_full(bytes: Bytes) -> RadarResponseBody {

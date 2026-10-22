@@ -2,32 +2,28 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Language: Rust](https://img.shields.io/badge/Rust-1.75%2B-orange.svg)](https://www.rust-lang.org/)
-[![Crates.io](https://img.shields.io/badge/crates.io-v0.3.0-red.svg)](https://crates.io/crates/jfp-edge-radar)
+[![Crates.io](https://img.shields.io/badge/crates.io-v0.4.0-red.svg)](https://crates.io/crates/jfp-edge-radar)
 
 Lekki, deterministyczny system obronny w języku **Rust** w ekosystemie **JARO Flash Protocol (JFP)**, zaprojektowany jako brzegowy radar oraz bramka inline (Reverse Proxy) wykrywająca wrogie autonomiczne botnety AI, mutujące skanery exploitów oraz ataki sterty/OOM na serwery PHP (w tym **PHP-2-Shell: CVE-2026-109618 i CVE-2026-109619**).
 
 ---
 
-## 🏛️ Nowości w wersji v0.3.0 (Operational Defense & Forensics)
+## 🏛️ Trzy Tarcze v0.4.0 Hardened Enterprise Core
 
-1. **Strumieniowy Slow-Drip Tarpit (Chunked Slow-Drip Body):**
-   * Zamiast zwykłego odrzucania połączeń (które uwalnia wątki atakującego), radar uruchamia asynchroniczny strumień HTTP `Transfer-Encoding: chunked`, wysyłając **1 bajt danych co $N$ sekund** (domyślnie 3s).
-   * **Wpływ na atakującego:** Blokuje pule połączeń bota, paraliżuje pętle inferencyjne agentów AI i zmusza atakującego do marnowania własnych zasobów pamięci i tokenów przy zerowym narzucie na procesor serwera.
+W wersji **v0.4.0** system został poddany bezkompromisowemu hardeningowi przeciwko zaawansowanym botnetom przyszłości, neutralizując 3 krytyczne wektory asymetryczne:
 
-2. **Automatyczny TTL Banów (Kernel Hygiene):**
-   * Reguły `iptables -I INPUT -s <IP> -j DROP` posiadają teraz konfigurowalny czas życia (`RADAR_BAN_TTL_SECS`, domyślnie 3600s).
-   * Wątek w tle samoczynnie usuwa wygasłe reguły z jądra Linuxa, zapobiegając degradacji tablicy routingu i puchnięciu pamięci kernela.
+### 1. State Flooding Shield (Ochrona Pamięci RAM)
+* **Agregacja IPv6 `/64`:** Wszystkie rotujące adresy IPv6 botnetów są automatycznie maskowane do prefiksu `/64` (`canonicalize_tracking_ip`), uniemożliwiając rozproszenie stanu sesji.
+* **Bounded LRU & One-Hit Eviction:** Twardy limit pojemności mapy sesji (`RADAR_MAX_SESSIONS_CAPACITY`, domyślnie 131,072). Przy nasyceniu tablicy silnik natychmiastowo usuwa jednorazowe uderzenia botów (`total_requests == 1`), eliminując ryzyko OOM (Out-Of-Memory DoS) na serwerze obronnym.
 
-3. **Moduł Forensyki i Raportowania (`jfp-edge-radar report`):**
-   * Dedykowana podkomenda CLI analizująca kryptograficzny łańcuch `proof.jsonl`.
-   * **Weryfikacja kryptograficzna:** Sprawdza poprawność każdego hasha SHA-256 w łańcuchu (wykrywa próby sfałszowania historii).
-   * **Generacja raportu:** Tworzy gotowy do audytu raport incydentu w formacie Markdown z rozkładem wektorów, listą top atakujących i oszacowaniem zaoszczędzonych tokenów LLM.
+### 2. Protocol Ambiguity & Smuggling Shield
+* **Fixed-Point URL Decoding:** Wieloprzebiegowe odkodowywanie URL w pętli wyłapujące zaciemnianie podwójnym lub potrójnym kodowaniem (`%252d`, `%25ADd`).
+* **Smuggling Disqualification (Score 1.0):** Wykrywanie niejednoznaczności protokołu HTTP (jednoczesne występowanie `Content-Length` i `Transfer-Encoding`, sprzeczne nagłówki, wstrzykiwanie znaków kontrolnych `\0`, `\r`, `\n`) i ich natychmiastowe odrzucenie z kodem `400 Bad Request`.
+* **Path Canonicalization:** Normalizacja ścieżek URI (`/./`, `/../`, powtarzające się slashe `///`) przed przekazaniem do analizatora i backendu.
 
-4. **Real Client IP Anti-Spoofing:**
-   * Ekstrakcja `CF-Connecting-IP`, `True-Client-IP`, `X-Real-IP` i `X-Forwarded-For` wyłącznie od zaufanych podsieci (`RADAR_TRUSTED_PROXIES`).
-
-5. **Tryb Audytowy (Dry-Run / Canary Mode):**
-   * Bezpieczny rozruch na produkcji (`RADAR_DRY_RUN=1`) bez ryzyka False Positives.
+### 3. File Descriptor Exhaustion Guard (Ochrona Tarpitu)
+* **Atomic Concurrency Cap:** Twardy limit aktywnych gniazd TCP w pułapce Tarpit (`RADAR_MAX_TARPIT_SESSIONS`, domyślnie 512).
+* **RAII Drop Counter:** Precyzyjne zliczanie otwartych deskryptorów w locie. W momencie osiągnięcia limitu kolejne złośliwe pakiety **nie otrzymują wiszącego gniazda**, lecz są natychmiast ucinane twardym `403 BlockProof`, chroniąc limit `nofile` systemu operacyjnego przed wyczerpaniem.
 
 ---
 
@@ -38,16 +34,18 @@ jfp-edge-radar/
 ├── Cargo.toml
 ├── README.md
 ├── tests/
-│   └── integration_proxy_test.rs # E2E tests: Reverse Proxy, Attack Block, Dry-Run & Tarpit
+│   └── integration_proxy_test.rs # E2E tests: Proxy, Dry-Run, Tarpit, Cap & Smuggling
 └── src/
     ├── lib.rs                    # Eksport biblioteki
-    ├── main.rs                   # CLI demona sieciowego & komenda report
-    ├── config.rs                 # Konfiguracja (bind, upstream, TTL, Tarpit, Dry-Run)
+    ├── main.rs                   # CLI demona & komendy report/monitor
+    ├── canonical.rs              # Fixed-Point URL Decode & Request Smuggling Shield
+    ├── config.rs                 # Konfiguracja (bind, upstream, TTL, Tarpit, Cap)
     ├── ip_extractor.rs           # Anti-spoofing Real Client IP (Cloudflare / Nginx)
     ├── mitigation.rs             # OS Kernel Mitigation z automatycznym TTL (iptables)
-    ├── tarpit.rs                 # Asynchroniczny strumień SlowDripBody (1 byte / N sec)
+    ├── tarpit.rs                 # SlowDripBody z RAII TarpitGuard (1 byte / N sec)
+    ├── monitor.rs                # Terminal NOC Live Monitor Dashboard
     ├── report.rs                 # Silnik weryfikacji hashy i generator raportów SOC
-    ├── tracker.rs                # SessionTracker: DashMap<IpAddr, IpSession>
+    ├── tracker.rs                # SessionTracker: Bounded State + IPv6 /64 Aggregation
     ├── php_signatures.rs         # Silnik detekcji PHP-2-Shell / OOM / CGI
     ├── analyzer.rs               # ASA Engine (Timing + Heurystyki + Mutacje)
     ├── proof.rs                  # ProofLogger: Tamper-Evident SHA-256 z rotacją
@@ -58,25 +56,30 @@ jfp-edge-radar/
 
 ## 🚀 Uruchomienie
 
-### 1. Testy automatyczne
+### 1. Testy automatyczne (22/22)
 ```bash
 cargo test
 ```
 
-### 2. Uruchomienie jako Reverse Proxy z Tarpitem i TTL
+### 2. Produkcyjne uruchomienie w trybie Hardened Enterprise
 ```bash
 export RADAR_BIND_ADDR="0.0.0.0:8080"
 export RADAR_UPSTREAM_ADDR="127.0.0.1:80"
 export RADAR_ENABLE_IPTABLES=1
 export RADAR_BAN_TTL_SECS=3600
-export RADAR_TARPIT_DRIP_MS=3000
+export RADAR_MAX_TARPIT_SESSIONS=512
+export RADAR_MAX_SESSIONS_CAPACITY=131072
 export RADAR_PROOF_LOG="/var/log/jfp/asa_radar_proof.jsonl"
 
-cargo run --release
+jfp-edge-radar
 ```
 
-### 3. Generowanie raportu forensycznego dla SOC
+### 3. Ekran Radaru na żywo (Live NOC Terminal)
 ```bash
-# Analiza logu i wygenerowanie raportu Markdown
-jfp-edge-radar report --log /var/log/jfp/asa_radar_proof.jsonl --out incident_report.md
+jfp-edge-radar monitor --log /tmp/jfp_radar_proof.jsonl
+```
+
+### 4. Generowanie raportu forensycznego dla SOC
+```bash
+jfp-edge-radar report --log /tmp/jfp_radar_proof.jsonl --out incident_report.md
 ```

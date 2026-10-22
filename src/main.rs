@@ -36,7 +36,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         )
         .init();
 
-    info!("Initializing JFP-Paradox Edge Radar (ASA Sniffer) v0.3.0...");
+    info!("Initializing JFP-Paradox Edge Radar (ASA Sniffer) v0.4.0 Hardened Enterprise Core...");
 
     let mut config = RadarConfig::default();
     if let Ok(addr) = std::env::var("RADAR_BIND_ADDR") {
@@ -50,6 +50,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     }
     if let Ok(max_bytes) = std::env::var("RADAR_PROOF_MAX_BYTES") {
         config.proof_log_max_bytes = max_bytes.parse().expect("Invalid RADAR_PROOF_MAX_BYTES");
+    }
+    if let Ok(max_sess) = std::env::var("RADAR_MAX_SESSIONS_CAPACITY") {
+        config.max_sessions_capacity = max_sess.parse().expect("Invalid RADAR_MAX_SESSIONS_CAPACITY");
+    }
+    if let Ok(max_tarpit) = std::env::var("RADAR_MAX_TARPIT_SESSIONS") {
+        config.max_tarpit_concurrency = max_tarpit.parse().expect("Invalid RADAR_MAX_TARPIT_SESSIONS");
     }
     if std::env::var("RADAR_DRY_RUN").map(|v| v == "1" || v.eq_ignore_ascii_case("true")).unwrap_or(false) {
         config.dry_run = true;

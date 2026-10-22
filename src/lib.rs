@@ -1,4 +1,5 @@
 pub mod analyzer;
+pub mod canonical;
 pub mod config;
 pub mod ip_extractor;
 pub mod mitigation;
@@ -11,6 +12,7 @@ pub mod tarpit;
 pub mod tracker;
 
 pub use analyzer::{AsaAnalyzer, DefensiveAction, ThreatAssessment};
+pub use canonical::{AmbiguityViolation, CanonicalShield};
 pub use config::RadarConfig;
 pub use ip_extractor::ClientIpExtractor;
 pub use mitigation::OsFirewallMitigation;
@@ -19,5 +21,5 @@ pub use php_signatures::{PhpExploitInspection, PhpSignatureEngine};
 pub use proof::{ProofLogger, ProofRecord};
 pub use report::{ForensicReporter, ForensicStats};
 pub use server::RadarServer;
-pub use tarpit::SlowDripBody;
-pub use tracker::{IpSession, RequestSnapshot, SessionTracker};
+pub use tarpit::{SlowDripBody, TarpitGuard};
+pub use tracker::{canonicalize_tracking_ip, IpSession, RequestSnapshot, SessionTracker};

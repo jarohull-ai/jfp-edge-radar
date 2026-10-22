@@ -223,3 +223,57 @@ async fn test_radar_slow_drip_tarpit() {
     let frame = body.frame().await.unwrap().unwrap();
     assert!(frame.is_data());
 }
+
+
+#[tokio::test]
+async fn test_radar_tarpit_concurrency_cap_fallback() {
+    let radar_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let radar_addr = radar_listener.local_addr().unwrap();
+
+    let tmp_proof = tempfile::NamedTempFile::new().unwrap();
+    let config = RadarConfig {
+        bind_addr: radar_addr,
+        proof_log_path: tmp_proof.path().to_path_buf(),
+        tarpit_drip_interval_ms: 1000,
+        max_tarpit_concurrency: 1, // Max 1 active tarpit!
+        trusted_proxies: vec!["127.0.0.1/32".to_string()],
+        ..RadarConfig::default()
+    };
+
+    let server = RadarServer::new(config);
+    tokio::spawn(async move {
+        let _ = server.run_with_listener(radar_listener).await;
+    });
+
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    // 1st request from IP A -> acquires the 1 available Tarpit slot
+    let stream1 = tokio::net::TcpStream::connect(radar_addr).await.unwrap();
+    let (mut sender1, conn1) = hyper::client::conn::http1::handshake(TokioIo::new(stream1)).await.unwrap();
+    tokio::spawn(async move {
+        let _ = conn1.await;
+    });
+
+    let req1 = Request::builder()
+        .uri("/test.php")
+        .header("x-forwarded-for", "198.51.100.1")
+        .body(Full::new(Bytes::new()))
+        .unwrap();
+    let resp1 = sender1.send_request(req1).await.unwrap();
+    assert_eq!(resp1.headers().get("x-jfp-defense").unwrap(), "slow-drip-tarpit");
+
+    // 2nd request from IP B while 1st is still active -> must hit concurrency cap and fallback immediately to 403 Forbidden!
+    let stream2 = tokio::net::TcpStream::connect(radar_addr).await.unwrap();
+    let (mut sender2, conn2) = hyper::client::conn::http1::handshake(TokioIo::new(stream2)).await.unwrap();
+    tokio::spawn(async move {
+        let _ = conn2.await;
+    });
+
+    let req2 = Request::builder()
+        .uri("/test.php")
+        .header("x-forwarded-for", "198.51.100.2")
+        .body(Full::new(Bytes::new()))
+        .unwrap();
+    let resp2 = sender2.send_request(req2).await.unwrap();
+    assert_eq!(resp2.status(), StatusCode::FORBIDDEN);
+}
