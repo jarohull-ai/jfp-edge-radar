@@ -17,6 +17,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     }
 
     // Check for CLI subcommands
+    if args.len() > 1 && args[1] == "init" {
+        run_init_subcommand(&args[2..])?;
+        return Ok(());
+    }
     if args.len() > 1 && args[1] == "report" {
         run_report_subcommand(&args[2..])?;
         return Ok(());
@@ -136,6 +140,31 @@ fn run_report_subcommand(
     Ok(())
 }
 
+fn run_init_subcommand(subargs: &[String]) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let mut target_dir = PathBuf::from(".");
+    let mut bind = None;
+    let mut upstream = None;
+
+    let mut i = 0;
+    while i < subargs.len() {
+        if subargs[i] == "--dir" && i + 1 < subargs.len() {
+            target_dir = PathBuf::from(&subargs[i + 1]);
+            i += 2;
+        } else if subargs[i] == "--bind" && i + 1 < subargs.len() {
+            bind = Some(subargs[i + 1].as_str());
+            i += 2;
+        } else if subargs[i] == "--upstream" && i + 1 < subargs.len() {
+            upstream = Some(subargs[i + 1].as_str());
+            i += 2;
+        } else {
+            i += 1;
+        }
+    }
+
+    jfp_edge_radar::InitWizard::run(&target_dir, bind, upstream)?;
+    Ok(())
+}
+
 fn print_help() {
     println!(
         r#"🛡️ JFP-Paradox Edge Radar v{} - Autonomous Agent Sniffer (ASA)
@@ -145,10 +174,16 @@ USAGE:
 
 COMMANDS:
     (default)       Start the reverse-proxy radar engine listening on RADAR_BIND_ADDR.
+    init            Generate production configuration (.env) and systemd service files.
     monitor         Start live terminal dashboard displaying real-time threats and statistics.
     report          Verify cryptographic SHA-256 proof chain and generate forensic Markdown report.
     --help, -h      Print help information.
     --version, -V   Print version information.
+
+OPTIONS FOR 'init':
+    --dir <PATH>        Output directory for generated files (default: current directory .)
+    --bind <ADDR>       Listen address (default: 0.0.0.0:8080)
+    --upstream <ADDR>   Protected upstream backend (default: 127.0.0.1:8000)
 
 OPTIONS FOR 'report':
     --log <PATH>    Path to proof JSONL log file (default: /var/log/jfp/asa_radar_proof.jsonl or $RADAR_PROOF_LOG)

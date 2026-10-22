@@ -3,7 +3,7 @@
 [![License: JFP Fair-Shield (<$10M Free)](https://img.shields.io/badge/License-JFP%20Fair--Shield%20(%3C$10M%20Free)-green.svg)](LICENSE)
 [![Enterprise: Commercial >=$10M](https://img.shields.io/badge/Commercial-%3E=$10M%20Revenue-blue.svg)](LICENSE)
 [![Language: Rust](https://img.shields.io/badge/Rust-1.75%2B-orange.svg)](https://www.rust-lang.org/)
-[![Crates.io](https://img.shields.io/badge/crates.io-v0.4.0-red.svg)](https://crates.io/crates/jfp-edge-radar)
+[![Crates.io](https://img.shields.io/badge/crates.io-v0.4.1-red.svg)](https://crates.io/crates/jfp-edge-radar)
 [![Release](https://img.shields.io/github/v/release/jarohull-ai/jfp-edge-radar)](https://github.com/jarohull-ai/jfp-edge-radar/releases)
 [![Build Status](https://img.shields.io/badge/tests-27%2F27%20passing-brightgreen.svg)]()
 
@@ -178,20 +178,27 @@ cargo build --release
 ## 💻 CLI Commands & Usage
 
 ```text
-🛡️ JFP-Paradox Edge Radar v0.4.0 - Autonomous Agent Sniffer (ASA)
+🛡️ JFP-Paradox Edge Radar v0.4.1 - Autonomous Agent Sniffer (ASA)
 
 USAGE:
     jfp-edge-radar [COMMAND] [OPTIONS]
 
 COMMANDS:
     (default)       Start the reverse-proxy radar engine listening on RADAR_BIND_ADDR.
+    init            Generate production configuration (.env) and systemd service files.
     monitor         Start live terminal dashboard displaying real-time threats and statistics.
     report          Verify cryptographic SHA-256 proof chain and generate forensic Markdown report.
     --help, -h      Print help information.
     --version, -V   Print version information.
 ```
 
-### 1. Run the Reverse Proxy Gateway
+### 1. Initialize Production Setup (Systemd & Config Wizard)
+```bash
+# Generate radar.env and jfp-edge-radar.service in /tmp or custom directory
+jfp-edge-radar init --dir /tmp/jfp --bind 0.0.0.0:8080 --upstream 127.0.0.1:8000
+```
+
+### 2. Run the Reverse Proxy Gateway
 ```bash
 export RADAR_BIND_ADDR="0.0.0.0:8080"
 export RADAR_UPSTREAM_ADDR="127.0.0.1:8000"
@@ -200,13 +207,13 @@ export RADAR_PROOF_LOG="/var/log/jfp/asa_radar_proof.jsonl"
 jfp-edge-radar
 ```
 
-### 2. Live NOC Terminal Monitor
+### 3. Live NOC Terminal Monitor
 To observe live attacks, request rates, anomaly scores, and tarpit sessions in real-time:
 ```bash
 jfp-edge-radar monitor --log /var/log/jfp/asa_radar_proof.jsonl
 ```
 
-### 3. Generate SOC Incident Report
+### 4. Generate SOC Incident Report
 To run a cryptographic audit on the proof chain and produce a Markdown incident report:
 ```bash
 jfp-edge-radar report \
