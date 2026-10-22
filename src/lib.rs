@@ -4,7 +4,9 @@ pub mod ip_extractor;
 pub mod mitigation;
 pub mod php_signatures;
 pub mod proof;
+pub mod report;
 pub mod server;
+pub mod tarpit;
 pub mod tracker;
 
 pub use analyzer::{AsaAnalyzer, DefensiveAction, ThreatAssessment};
@@ -13,5 +15,7 @@ pub use ip_extractor::ClientIpExtractor;
 pub use mitigation::OsFirewallMitigation;
 pub use php_signatures::{PhpExploitInspection, PhpSignatureEngine};
 pub use proof::{ProofLogger, ProofRecord};
+pub use report::{ForensicReporter, ForensicStats};
 pub use server::RadarServer;
+pub use tarpit::SlowDripBody;
 pub use tracker::{IpSession, RequestSnapshot, SessionTracker};

@@ -1,5 +1,5 @@
 use bytes::Bytes;
-use http_body_util::Full;
+use http_body_util::{BodyExt, Full};
 use hyper::service::service_fn;
 use hyper::{Request, Response, StatusCode};
 use hyper_util::rt::TokioIo;
@@ -176,4 +176,50 @@ async fn test_radar_dry_run_audit_mode() {
 
     let log_content = std::fs::read_to_string(tmp_proof.path()).unwrap();
     assert!(log_content.contains("ASA_ATTACK_SIMULATED_DRY_RUN"));
+}
+
+
+#[tokio::test]
+async fn test_radar_slow_drip_tarpit() {
+    let radar_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let radar_addr = radar_listener.local_addr().unwrap();
+
+    let tmp_proof = tempfile::NamedTempFile::new().unwrap();
+    let config = RadarConfig {
+        bind_addr: radar_addr,
+        proof_log_path: tmp_proof.path().to_path_buf(),
+        tarpit_drip_interval_ms: 50, // 50ms for rapid test execution
+        ..RadarConfig::default()
+    };
+
+    let server = RadarServer::new(config);
+    tokio::spawn(async move {
+        let _ = server.run_with_listener(radar_listener).await;
+    });
+
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    // Connect and send a request that triggers Tarpit (e.g. PHP probe scoring ~0.35)
+    let stream = tokio::net::TcpStream::connect(radar_addr).await.unwrap();
+    let (mut sender, conn) = hyper::client::conn::http1::handshake(TokioIo::new(stream)).await.unwrap();
+    tokio::spawn(async move {
+        let _ = conn.await;
+    });
+
+    let req = Request::builder()
+        .uri("/test.php")
+        .body(Full::new(Bytes::new()))
+        .unwrap();
+
+    let resp = sender.send_request(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    assert_eq!(
+        resp.headers().get("x-jfp-defense").unwrap(),
+        "slow-drip-tarpit"
+    );
+
+    // Read a few bytes from the stream to verify chunked slow drip
+    let mut body = resp.into_body();
+    let frame = body.frame().await.unwrap().unwrap();
+    assert!(frame.is_data());
 }

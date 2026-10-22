@@ -65,7 +65,7 @@ impl AsaAnalyzer {
             if dt >= 1200 && dt <= 8500 {
                 score += 0.25;
                 indicators.push(format!("TIMING_WINDOW: Delta {}ms fits LLM reflection loop", dt));
-            } else if dt < 40 {
+            } else if dt < 40 && history.len() >= 2 {
                 score += 0.20;
                 indicators.push(format!("TIMING_BURST: High-rate automated flood ({}ms)", dt));
             }
@@ -90,12 +90,12 @@ impl AsaAnalyzer {
         }
 
         // Action recommendation based on mathematical score gradient
-        let action = if score >= 0.75 {
+        let action = if score >= 0.70 {
             DefensiveAction::BlockProof
         } else if score >= 0.45 {
             DefensiveAction::DeceiveHoney
         } else if score >= 0.30 {
-            DefensiveAction::Tarpit(1500)
+            DefensiveAction::Tarpit(3000)
         } else {
             DefensiveAction::Allow
         };

@@ -12,6 +12,8 @@ pub struct RadarConfig {
     pub enable_honey_tokens: bool,
     pub dry_run: bool,
     pub enable_os_firewall_drop: bool,
+    pub ban_ttl_secs: u64,
+    pub tarpit_drip_interval_ms: u64,
     pub trusted_proxies: Vec<String>,
 }
 
@@ -26,6 +28,8 @@ impl Default for RadarConfig {
             enable_honey_tokens: true,
             dry_run: false,
             enable_os_firewall_drop: false,
+            ban_ttl_secs: 3600,             // 1 hour ban TTL
+            tarpit_drip_interval_ms: 3000, // 1 byte every 3 seconds
             trusted_proxies: Vec::new(),
         }
     }

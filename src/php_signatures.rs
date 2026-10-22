@@ -62,7 +62,7 @@ impl PhpSignatureEngine {
 
         for probe in &probe_paths {
             if path_lower.contains(probe) {
-                score += 0.25;
+                score += 0.35;
                 flags.push(format!("PHP_TARGETED_PROBE: matching '{}'", probe));
                 break;
             }
@@ -117,7 +117,7 @@ impl PhpSignatureEngine {
         }
 
         PhpExploitInspection {
-            is_suspicious: score >= 0.40,
+            is_suspicious: score >= 0.30,
             severity_score: score.min(1.0),
             flags,
         }
