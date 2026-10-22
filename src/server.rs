@@ -1,5 +1,7 @@
 use crate::analyzer::{AsaAnalyzer, DefensiveAction};
 use crate::config::RadarConfig;
+use crate::ip_extractor::ClientIpExtractor;
+use crate::mitigation::OsFirewallMitigation;
 use crate::proof::ProofLogger;
 use crate::tracker::SessionTracker;
 use bytes::Bytes;
@@ -18,17 +20,27 @@ pub struct RadarServer {
     config: RadarConfig,
     tracker: Arc<SessionTracker>,
     proof_logger: Arc<ProofLogger>,
+    ip_extractor: Arc<ClientIpExtractor>,
+    mitigation: Arc<OsFirewallMitigation>,
 }
 
 impl RadarServer {
     pub fn new(config: RadarConfig) -> Self {
         let tracker = Arc::new(SessionTracker::new());
-        let proof_logger = Arc::new(ProofLogger::new(config.proof_log_path.clone(), None));
+        let proof_logger = Arc::new(ProofLogger::new(
+            config.proof_log_path.clone(),
+            None,
+            Some(config.proof_log_max_bytes),
+        ));
+        let ip_extractor = Arc::new(ClientIpExtractor::new(&config.trusted_proxies));
+        let mitigation = Arc::new(OsFirewallMitigation::new(config.enable_os_firewall_drop));
 
         Self {
             config,
             tracker,
             proof_logger,
+            ip_extractor,
+            mitigation,
         }
     }
 
@@ -43,6 +55,12 @@ impl RadarServer {
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let local_addr = listener.local_addr()?;
         info!("JFP-Paradox Edge Radar listening on {}", local_addr);
+        if self.config.dry_run {
+            warn!("OPERATIONAL MODE: DRY-RUN / AUDIT ACTIVE (simulating mitigations without dropping)");
+        }
+        if self.config.enable_os_firewall_drop {
+            info!("OS Firewall Mitigation (iptables) ENABLED");
+        }
         if let Some(upstream) = self.config.upstream_addr {
             info!("Upstream Reverse Proxy target: {}", upstream);
         } else {
@@ -75,14 +93,29 @@ impl RadarServer {
             let io = TokioIo::new(stream);
             let tracker = Arc::clone(&self.tracker);
             let proof_logger = Arc::clone(&self.proof_logger);
+            let ip_extractor = Arc::clone(&self.ip_extractor);
+            let mitigation = Arc::clone(&self.mitigation);
             let upstream_addr = self.config.upstream_addr;
+            let dry_run = self.config.dry_run;
 
             tokio::spawn(async move {
                 let service = service_fn(move |req: Request<Incoming>| {
                     let tracker = Arc::clone(&tracker);
                     let proof_logger = Arc::clone(&proof_logger);
+                    let ip_extractor = Arc::clone(&ip_extractor);
+                    let mitigation = Arc::clone(&mitigation);
                     async move {
-                        handle_request(req, remote_addr, tracker, proof_logger, upstream_addr).await
+                        handle_request(
+                            req,
+                            remote_addr,
+                            tracker,
+                            proof_logger,
+                            ip_extractor,
+                            mitigation,
+                            upstream_addr,
+                            dry_run,
+                        )
+                        .await
                     }
                 });
 
@@ -102,9 +135,15 @@ async fn handle_request(
     remote_addr: SocketAddr,
     tracker: Arc<SessionTracker>,
     proof_logger: Arc<ProofLogger>,
+    ip_extractor: Arc<ClientIpExtractor>,
+    mitigation: Arc<OsFirewallMitigation>,
     upstream_addr: Option<SocketAddr>,
+    dry_run: bool,
 ) -> Result<Response<Full<Bytes>>, hyper::Error> {
-    let client_ip = remote_addr.ip();
+    let peer_ip = remote_addr.ip();
+    // Anti-spoofing Real Client IP extraction (Cloudflare / Nginx / ALB)
+    let client_ip = ip_extractor.extract_real_ip(peer_ip, req.headers());
+
     let method = req.method().clone();
     let uri = req.uri().clone();
     let path = uri.path();
@@ -160,9 +199,52 @@ async fn handle_request(
 
     if assessment.is_autonomous_agent || assessment.anomaly_score > 0.4 {
         warn!(
-            "ASA Alert: IP {} (Req #{}) Score: {:.2} Action: {:?} - Indicators: {:?}",
-            client_ip, req_num, assessment.anomaly_score, assessment.recommended_action, assessment.indicators
+            "ASA Alert: Client IP {} (Peer: {}) (Req #{}) Score: {:.2} Action: {:?} DryRun: {} - Indicators: {:?}",
+            client_ip, peer_ip, req_num, assessment.anomaly_score, assessment.recommended_action, dry_run, assessment.indicators
         );
+    }
+
+    // Dry-Run Simulation Interception
+    if dry_run && assessment.recommended_action != DefensiveAction::Allow {
+        let proof = proof_logger.log_event(
+            "ASA_ATTACK_SIMULATED_DRY_RUN",
+            &client_ip.to_string(),
+            serde_json::json!({
+                "path": path,
+                "method": method.as_str(),
+                "query": query,
+                "peer_ip": peer_ip.to_string(),
+                "simulated_action": assessment.recommended_action,
+                "threat_assessment": assessment,
+            }),
+        );
+
+        warn!(
+            "[DRY-RUN / AUDIT] Would enforce {:?} against client IP {} (indicators: {:?})",
+            assessment.recommended_action, client_ip, assessment.indicators
+        );
+
+        // In dry run, forward to upstream or allow
+        if let Some(upstream) = upstream_addr {
+            let mut resp = match forward_to_upstream(upstream, parts, body_bytes, client_ip).await {
+                Ok(r) => r,
+                Err(_) => Response::builder()
+                    .status(StatusCode::BAD_GATEWAY)
+                    .body(Full::new(Bytes::from(r#"{"error":"Bad Gateway"}"#)))
+                    .unwrap(),
+            };
+            if let Ok(p) = proof {
+                resp.headers_mut()
+                    .insert("x-jfp-dry-run-hash", p.entry_hash.parse().unwrap());
+            }
+            return Ok(resp);
+        } else {
+            return Ok(Response::builder()
+                .status(StatusCode::OK)
+                .header("x-jfp-dry-run", "audit-only")
+                .body(Full::new(Bytes::from(r#"{"audit":"dry_run_allowed"}"#)))
+                .unwrap());
+        }
     }
 
     let response = match assessment.recommended_action {
@@ -174,12 +256,16 @@ async fn handle_request(
                     "path": path,
                     "method": method.as_str(),
                     "query": query,
+                    "peer_ip": peer_ip.to_string(),
                     "delta_ms": delta_ms,
                     "threat_assessment": assessment,
                 }),
             );
 
             tracker.track_response(client_ip, 403);
+
+            // Trigger OS Kernel Firewall Drop (iptables) if enabled
+            let _ = mitigation.drop_ip(client_ip);
 
             let mut builder = Response::builder()
                 .status(StatusCode::FORBIDDEN)
@@ -201,6 +287,7 @@ async fn handle_request(
                 &client_ip.to_string(),
                 serde_json::json!({
                     "path": path,
+                    "peer_ip": peer_ip.to_string(),
                     "threat_assessment": assessment,
                 }),
             );

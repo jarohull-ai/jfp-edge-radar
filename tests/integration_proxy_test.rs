@@ -49,6 +49,7 @@ async fn test_radar_reverse_proxy_and_attack_interception() {
         proof_log_path: tmp_proof.path().to_path_buf(),
         max_session_idle_secs: 60,
         enable_honey_tokens: true,
+        ..RadarConfig::default()
     };
 
     let server = RadarServer::new(config);
@@ -106,4 +107,73 @@ async fn test_radar_reverse_proxy_and_attack_interception() {
     let log_content = std::fs::read_to_string(tmp_proof.path()).unwrap();
     assert!(log_content.contains("ASA_ATTACK_BLOCKED"));
     assert!(log_content.contains("PHP_CGI_ARG_INJECTION"));
+}
+
+
+#[tokio::test]
+async fn test_radar_dry_run_audit_mode() {
+    let upstream_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let upstream_addr: SocketAddr = upstream_listener.local_addr().unwrap();
+
+    tokio::spawn(async move {
+        loop {
+            if let Ok((stream, _)) = upstream_listener.accept().await {
+                let io = TokioIo::new(stream);
+                tokio::spawn(async move {
+                    let _ = hyper::server::conn::http1::Builder::new()
+                        .serve_connection(
+                            io,
+                            service_fn(|_req: Request<hyper::body::Incoming>| async {
+                                Ok::<_, hyper::Error>(
+                                    Response::builder()
+                                        .status(StatusCode::OK)
+                                        .body(Full::new(Bytes::from(r#"{"status":"backend_allowed"}"#)))
+                                        .unwrap(),
+                                )
+                            }),
+                        )
+                        .await;
+                });
+            }
+        }
+    });
+
+    let radar_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let radar_addr = radar_listener.local_addr().unwrap();
+
+    let tmp_proof = tempfile::NamedTempFile::new().unwrap();
+    let config = RadarConfig {
+        bind_addr: radar_addr,
+        upstream_addr: Some(upstream_addr),
+        proof_log_path: tmp_proof.path().to_path_buf(),
+        dry_run: true, // Audit only
+        ..RadarConfig::default()
+    };
+
+    let server = RadarServer::new(config);
+    tokio::spawn(async move {
+        let _ = server.run_with_listener(radar_listener).await;
+    });
+
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    // Send attack payload - in dry-run mode, it should NOT return 403, but forward to backend and log audit
+    let stream = tokio::net::TcpStream::connect(radar_addr).await.unwrap();
+    let (mut sender, conn) = hyper::client::conn::http1::handshake(TokioIo::new(stream)).await.unwrap();
+    tokio::spawn(async move {
+        let _ = conn.await;
+    });
+
+    let req = Request::builder()
+        .uri("/index.php?-d+allow_url_include=on")
+        .header("PHP_VALUE", "auto_prepend_file=php://input")
+        .body(Full::new(Bytes::new()))
+        .unwrap();
+
+    let resp = sender.send_request(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    assert!(resp.headers().contains_key("x-jfp-dry-run-hash"));
+
+    let log_content = std::fs::read_to_string(tmp_proof.path()).unwrap();
+    assert!(log_content.contains("ASA_ATTACK_SIMULATED_DRY_RUN"));
 }
