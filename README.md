@@ -11,6 +11,10 @@
 
 It is engineered specifically to intercept autonomous AI agent botnets, mutating zero-day exploit scanners, and memory-exhaustion/RCE attacks targeting PHP runtimes (including **PHP-2-Shell: CVE-2026-109618 and CVE-2026-109619**) with **zero LLM overhead in the network critical path (0ms inference latency, 100% deterministic execution)**.
 
+<p align="center">
+  <img src="assets/command-center-hud.png" alt="JFP-Paradox Command Center HUD (Tactical Teal & Stealth Cockpit)" width="100%">
+</p>
+
 ---
 
 ### 📖 Full Project Wiki & Knowledge Base

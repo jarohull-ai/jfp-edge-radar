@@ -1,5 +1,9 @@
 # Command Center HUD & Cockpit Guide 🎛️
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/jarohull-ai/jfp-edge-radar/main/assets/command-center-hud.png" alt="Command Center HUD (Tactical Teal & Stealth Cockpit)" width="100%">
+</p>
+
 The **Command Center HUD** transforms `jfp-edge-radar monitor` into a military-grade terminal cockpit powered by **Ratatui** and **Crossterm**.
 
 ---

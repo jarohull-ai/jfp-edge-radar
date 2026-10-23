@@ -42,16 +42,38 @@ impl ProofLogger {
             let _ = std::fs::create_dir_all(parent);
         }
 
-        let seed = seed_hash.unwrap_or_else(|| {
+        let has_explicit_seed = seed_hash.is_some();
+        let mut seed = seed_hash.unwrap_or_else(|| {
             "0000000000000000000000000000000000000000000000000000000000000000".to_string()
         });
+        let mut counter = 0;
+
+        // If resuming on an existing log file without explicit seed, pick up the last entry's hash
+        if !has_explicit_seed && log_path.exists() {
+            if let Ok(file) = std::fs::File::open(&log_path) {
+                let reader = std::io::BufReader::new(file);
+                let mut last_rec: Option<ProofRecord> = None;
+                for line in std::io::BufRead::lines(reader).map_while(Result::ok) {
+                    let trimmed = line.trim();
+                    if !trimmed.is_empty() {
+                        if let Ok(rec) = serde_json::from_str::<ProofRecord>(trimmed) {
+                            last_rec = Some(rec);
+                        }
+                    }
+                }
+                if let Some(r) = last_rec {
+                    seed = r.entry_hash;
+                    counter = r.counter + 1;
+                }
+            }
+        }
 
         Self {
             log_path,
             max_segment_bytes: max_segment_bytes.unwrap_or(DEFAULT_MAX_SEGMENT_BYTES),
             state: Mutex::new(ProofState {
                 prev_hash: seed,
-                counter: 0,
+                counter,
             }),
         }
     }
@@ -238,5 +260,29 @@ mod tests {
 
         // rec2 must be part of continuous counter
         assert_eq!(rec2.counter, 2); // 0 (rec1), 1 (seal), 2 (rec2)
+    }
+
+    #[test]
+    fn test_proof_logger_seamless_resumption_across_restarts() {
+        let dir = tempfile::tempdir().unwrap();
+        let log_file = dir.path().join("proof.jsonl");
+
+        {
+            let logger = ProofLogger::new(log_file.clone(), None, None);
+            let _rec1 = logger.log_event("EVENT_1", "127.0.0.1", serde_json::json!({"action": "block"})).unwrap();
+        }
+
+        // Simulate daemon restart
+        {
+            let logger = ProofLogger::new(log_file.clone(), None, None);
+            let rec2 = logger.log_event("EVENT_2", "127.0.0.1", serde_json::json!({"action": "block"})).unwrap();
+            assert_eq!(rec2.counter, 1);
+            assert_ne!(rec2.prev_hash, "0000000000000000000000000000000000000000000000000000000000000000");
+        }
+
+        // Verify chain continuity
+        let stats = crate::report::ForensicReporter::analyze_log(&log_file).unwrap();
+        assert!(stats.chain_verified);
+        assert_eq!(stats.total_records, 2);
     }
 }
