@@ -2,6 +2,7 @@
 
 * **[Home](Home)**
 * **[Command Center HUD Cockpit](Command-Center-HUD)**
+* **[Deep Tarpit Economy & Metrics](Deep-Tarpit-Economy-and-Metrics)**
 * **[Architecture & The 3 Shields](Architecture-and-The-Three-Shields)**
 * **[Production Deployment Guide](Production-Deployment-Guide)**
 * **[Incident Response & Forensics](Incident-Response-and-Forensics)**

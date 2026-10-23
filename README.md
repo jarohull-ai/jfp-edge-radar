@@ -3,9 +3,9 @@
 [![License: JFP Fair-Shield (<$10M Free)](https://img.shields.io/badge/License-JFP%20Fair--Shield%20(%3C$10M%20Free)-green.svg)](LICENSE)
 [![Enterprise: Commercial >=$10M](https://img.shields.io/badge/Commercial-%3E=$10M%20Revenue-blue.svg)](LICENSE)
 [![Language: Rust](https://img.shields.io/badge/Rust-1.75%2B-orange.svg)](https://www.rust-lang.org/)
-[![Crates.io](https://img.shields.io/badge/crates.io-v0.4.2-red.svg)](https://crates.io/crates/jfp-edge-radar)
+[![Crates.io](https://img.shields.io/badge/crates.io-v0.4.3-red.svg)](https://crates.io/crates/jfp-edge-radar)
 [![Release](https://img.shields.io/github/v/release/jarohull-ai/jfp-edge-radar)](https://github.com/jarohull-ai/jfp-edge-radar/releases)
-[![Build Status](https://img.shields.io/badge/tests-27%2F27%20passing-brightgreen.svg)]()
+[![Build Status](https://img.shields.io/badge/tests-35%2F35%20passing-brightgreen.svg)]()
 
 **JFP-Paradox Edge Radar** is an ultra-lightweight, high-performance, deterministic perimeter security gateway and reverse proxy built in **Rust** as part of the **JARO Flash Protocol (JFP)** ecosystem.
 
@@ -89,9 +89,94 @@ It is engineered specifically to intercept autonomous AI agent botnets, mutating
 
 ---
 
+## ⚡ Deep Tarpit Economy: Active Asymmetric Adversary Drainage (v0.4.3)
+
+Traditional WAFs rely on passive `403 Forbidden` or `404 Not Found` responses. In modern botnet operations, this creates an asymmetric advantage for the adversary:
+1. The attacker rotates proxies or VPN egress points in milliseconds.
+2. The defender pays for CPU cycles, RAM allocations, socket handshakes, and log storage.
+3. The attacker's scanning threads remain free to attack other targets.
+
+**JFP-Paradox Edge Radar flips this economic asymmetry:**
+
+```
+Attacker Scanner / Botnet Pool (e.g. 100 worker threads)
+              │
+              ├── [POST /api/v1/recon] (Autonomous Agent Sniffed)
+              ▼
+   ┌────────────────────────────────────────────────────────┐
+   │         JFP Deep Tarpit Economy (Slow-Drip Engine)      │
+   │                                                        │
+   │  • Zero-Allocation Streaming Body (Hyper 1.x)          │
+   │  • Asymmetric Slow-Drip: 1 chunk / 3,000ms             │
+   │  • Format Auto-Detection (Path & Accept header):       │
+   │      - InfiniteJsonSink: {"status":"stream","data":[...│
+   │      - InfiniteHtmlSink: <table><tr><td>Node...        │
+   │                                                        │
+   │  Adversary Parser Behavior:                            │
+   │  - Client thread/coroutine freezes waiting for EOF     │
+   │  - Client JSON/DOM parser buffers chunks continuously   │
+   │  - Result: Out-Of-Memory (OOM) Crash on Adversary C2!  │
+   └────────────────────────────────────────────────────────┘
+```
+
+* **Infinite JSON Sink (`InfiniteJsonSink`):** Streams dynamically constructed, infinitely unclosed nested JSON arrays (`{"status":"active_sync","stream":[{"node_id":N,"depth":N,"data":[`). Standard client libraries (`requests.json()`, `json.Unmarshal`, `axios`, `fetch`) buffer the entire payload into RAM before parsing, driving the adversary scanner to an Out-Of-Memory (OOM) kernel crash.
+* **Infinite HTML DOM Sink (`InfiniteHtmlSink`):** Streams unclosed `<table><tr><td>` structures to exhaust DOM tree parsing memory in headless browsers (Puppeteer, Playwright, Chromium, BeautifulSoup).
+* **Defensive Resource Safety:** Zero RAM allocation on the server side. Payload chunks are generated on-the-fly inside the tick interval.
+* **Cryptographic Accounting:** When an attacker terminates or drops a connection, an RAII `TarpitGuard` logs the exact seconds wasted and total bytes drained into the cryptographic SHA-256 ledger.
+
+---
+
+## 📊 Real-Time Prometheus Metrics (`/metrics`)
+
+JFP Edge Radar exposes native OpenMetrics / Prometheus telemetry directly on the proxy bind address:
+
+```bash
+curl -s http://127.0.0.1:8080/metrics
+```
+
+```text
+# HELP jfp_radar_up Radar daemon running state (1 = healthy).
+# TYPE jfp_radar_up gauge
+jfp_radar_up 1
+
+# HELP jfp_radar_tracked_sessions_total Current active client IP sessions in bounded state.
+# TYPE jfp_radar_tracked_sessions_total gauge
+jfp_radar_tracked_sessions_total 42
+
+# HELP jfp_radar_active_tarpits Current concurrent adversary sockets trapped in deep tarpit.
+# TYPE jfp_radar_active_tarpits gauge
+jfp_radar_active_tarpits 7
+
+# HELP jfp_radar_tarpit_seconds_drained_total Cumulative adversary compute/thread time wasted in slow-drip tarpit.
+# TYPE jfp_radar_tarpit_seconds_drained_total counter
+jfp_radar_tarpit_seconds_drained_total 14820
+
+# HELP jfp_radar_tarpit_bytes_drained_total Cumulative asymmetric entropy bytes served to adversary sockets.
+# TYPE jfp_radar_tarpit_bytes_drained_total counter
+jfp_radar_tarpit_bytes_drained_total 894210
+
+# HELP jfp_radar_proof_events_total Cryptographically sealed defensive forensic audit records.
+# TYPE jfp_radar_proof_events_total counter
+jfp_radar_proof_events_total{action="block"} 183
+jfp_radar_proof_events_total{action="honey"} 12
+jfp_radar_proof_events_total{action="tarpit"} 45
+jfp_radar_proof_events_total{action="dry_run"} 0
+jfp_radar_proof_events_total{action="total"} 240
+
+# HELP jfp_radar_unique_attackers Number of unique attacker IP addresses recorded.
+# TYPE jfp_radar_unique_attackers gauge
+jfp_radar_unique_attackers 64
+
+# HELP jfp_radar_cryptographic_chain_intact Proof hash integrity status (1 = unbroken chain, 0 = tampered).
+# TYPE jfp_radar_cryptographic_chain_intact gauge
+jfp_radar_cryptographic_chain_intact 1
+```
+
+---
+
 ## 🔬 Verified Test Scenarios & Live Execution Dumps
 
-All 27 automated unit, integration, and end-to-end tests run green (`cargo test`). Detailed documentation is available in [docs/SCENARIOS_AND_SECURITY_PROOFS.md](docs/SCENARIOS_AND_SECURITY_PROOFS.md).
+All 35 automated unit, integration, and end-to-end tests run green (`cargo test`). Detailed documentation is available in [docs/SCENARIOS_AND_SECURITY_PROOFS.md](docs/SCENARIOS_AND_SECURITY_PROOFS.md).
 
 ### Scenario 1: Intercepting PHP-2-Shell (CVE-2026-109618)
 * **Vector:** Attacker injects `-d allow_url_include=on` and `PHP_VALUE: auto_prepend_file=php://input`.
@@ -257,7 +342,7 @@ All settings can be configured via environment variables:
 
 ## 🧪 Testing Suite
 
-Execute the complete 27-test validation suite:
+Execute the complete 35-test validation suite:
 
 ```bash
 # Run all unit, integration, and scenario tests

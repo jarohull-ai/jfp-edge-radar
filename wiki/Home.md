@@ -23,7 +23,13 @@ Explore the dedicated chapters below:
 1. **[Architecture and The Three Shields](Architecture-and-The-Three-Shields)**  
    Deep dive into the v0.4.0 Hardened Enterprise Core: State Flooding Protection, Protocol Canonical Shield, and File Descriptor Concurrency Guard.
 
-2. **[Production Deployment Guide](Production-Deployment-Guide)**  
+2. **[Command Center HUD Cockpit](Command-Center-HUD)**  
+   Interactive Ratatui TUI cockpit featuring Tactical Teal, Deep Midnight stealth mode, and the `[ESC]` kernel build panic button.
+
+3. **[Deep Tarpit Economy & Metrics](Deep-Tarpit-Economy-and-Metrics)**  
+   Asymmetric adversarial resource drainage with Infinite JSON/DOM sinks and native Prometheus `/metrics` telemetry.
+
+4. **[Production Deployment Guide](Production-Deployment-Guide)**  
    Step-by-step instructions for bare-metal, systemd, Docker, and reverse-proxy setups behind Cloudflare, AWS ALB, and Nginx.
 
 3. **[Incident Response and Forensics](Incident-Response-and-Forensics)**  

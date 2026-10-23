@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fs::OpenOptions;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 const DEFAULT_MAX_SEGMENT_BYTES: u64 = 10 * 1024 * 1024; // 10 MB
@@ -33,6 +33,10 @@ struct ProofState {
 }
 
 impl ProofLogger {
+    pub fn log_path(&self) -> &Path {
+        &self.log_path
+    }
+
     pub fn new(
         log_path: PathBuf,
         seed_hash: Option<String>,
@@ -269,15 +273,30 @@ mod tests {
 
         {
             let logger = ProofLogger::new(log_file.clone(), None, None);
-            let _rec1 = logger.log_event("EVENT_1", "127.0.0.1", serde_json::json!({"action": "block"})).unwrap();
+            let _rec1 = logger
+                .log_event(
+                    "EVENT_1",
+                    "127.0.0.1",
+                    serde_json::json!({"action": "block"}),
+                )
+                .unwrap();
         }
 
         // Simulate daemon restart
         {
             let logger = ProofLogger::new(log_file.clone(), None, None);
-            let rec2 = logger.log_event("EVENT_2", "127.0.0.1", serde_json::json!({"action": "block"})).unwrap();
+            let rec2 = logger
+                .log_event(
+                    "EVENT_2",
+                    "127.0.0.1",
+                    serde_json::json!({"action": "block"}),
+                )
+                .unwrap();
             assert_eq!(rec2.counter, 1);
-            assert_ne!(rec2.prev_hash, "0000000000000000000000000000000000000000000000000000000000000000");
+            assert_ne!(
+                rec2.prev_hash,
+                "0000000000000000000000000000000000000000000000000000000000000000"
+            );
         }
 
         // Verify chain continuity

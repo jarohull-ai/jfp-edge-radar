@@ -228,7 +228,7 @@ async fn test_radar_slow_drip_tarpit() {
     assert_eq!(resp.status(), StatusCode::OK);
     assert_eq!(
         resp.headers().get("x-jfp-defense").unwrap(),
-        "slow-drip-tarpit"
+        "deep-tarpit-economy"
     );
 
     // Read a few bytes from the stream to verify chunked slow drip
@@ -276,7 +276,7 @@ async fn test_radar_tarpit_concurrency_cap_fallback() {
     let resp1 = sender1.send_request(req1).await.unwrap();
     assert_eq!(
         resp1.headers().get("x-jfp-defense").unwrap(),
-        "slow-drip-tarpit"
+        "deep-tarpit-economy"
     );
 
     // 2nd request from IP B while 1st is still active -> must hit concurrency cap and fallback immediately to 403 Forbidden!
@@ -295,4 +295,52 @@ async fn test_radar_tarpit_concurrency_cap_fallback() {
         .unwrap();
     let resp2 = sender2.send_request(req2).await.unwrap();
     assert_eq!(resp2.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn test_prometheus_metrics_endpoint() {
+    let radar_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let radar_addr = radar_listener.local_addr().unwrap();
+
+    let tmp_proof = tempfile::NamedTempFile::new().unwrap();
+    let config = RadarConfig {
+        bind_addr: radar_addr,
+        proof_log_path: tmp_proof.path().to_path_buf(),
+        ..RadarConfig::default()
+    };
+
+    let server = RadarServer::new(config);
+    tokio::spawn(async move {
+        let _ = server.run_with_listener(radar_listener).await;
+    });
+
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    let stream = tokio::net::TcpStream::connect(radar_addr).await.unwrap();
+    let (mut sender, conn) = hyper::client::conn::http1::handshake(TokioIo::new(stream))
+        .await
+        .unwrap();
+    tokio::spawn(async move {
+        let _ = conn.await;
+    });
+
+    let req = Request::builder()
+        .uri("/metrics")
+        .body(Full::new(Bytes::new()))
+        .unwrap();
+
+    let resp = sender.send_request(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    assert_eq!(
+        resp.headers().get("content-type").unwrap(),
+        "text/plain; version=0.0.4; charset=utf-8"
+    );
+
+    let body_bytes = resp.into_body().collect().await.unwrap().to_bytes();
+    let metrics_text = String::from_utf8_lossy(&body_bytes);
+    assert!(metrics_text.contains("jfp_radar_up 1"));
+    assert!(metrics_text.contains("jfp_radar_tracked_sessions_total"));
+    assert!(metrics_text.contains("jfp_radar_active_tarpits"));
+    assert!(metrics_text.contains("jfp_radar_tarpit_seconds_drained_total"));
+    assert!(metrics_text.contains("jfp_radar_proof_events_total{action=\"total\"}"));
 }

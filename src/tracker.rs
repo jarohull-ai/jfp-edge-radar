@@ -225,6 +225,11 @@ impl SessionTracker {
         });
         evicted
     }
+
+    /// Returns the current number of active tracked sessions in memory.
+    pub fn active_session_count(&self) -> usize {
+        self.sessions.len()
+    }
 }
 
 #[cfg(test)]

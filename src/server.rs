@@ -4,7 +4,10 @@ use crate::config::RadarConfig;
 use crate::ip_extractor::ClientIpExtractor;
 use crate::mitigation::OsFirewallMitigation;
 use crate::proof::ProofLogger;
-use crate::tarpit::SlowDripBody;
+use crate::report::ForensicReporter;
+use crate::tarpit::{
+    SlowDripBody, TarpitPayloadMode, GLOBAL_TARPIT_BYTES_DRAINED, GLOBAL_TARPIT_SECONDS_DRAINED,
+};
 use crate::tracker::SessionTracker;
 use bytes::Bytes;
 use http_body_util::combinators::BoxBody;
@@ -249,10 +252,25 @@ async fn handle_request(
     let path = canonical_path.as_str();
     let query = canonical_query.as_deref();
 
+    // Prometheus Metrics Scraper Endpoint
+    if path == "/metrics" {
+        let metrics_text = generate_prometheus_metrics(
+            proof_logger.log_path(),
+            &tracker,
+            active_tarpits.load(Ordering::Relaxed),
+        );
+        return Ok(Response::builder()
+            .status(StatusCode::OK)
+            .header("content-type", "text/plain; version=0.0.4; charset=utf-8")
+            .body(box_full(Bytes::from(metrics_text)))
+            .unwrap());
+    }
+
     // Extract headers for ASA & PHP exploit inspection
     let mut header_pairs = Vec::new();
     let mut user_agent = None;
     let mut content_length = None;
+    let mut accept_hdr = None;
 
     for (k, v) in req.headers() {
         if let Ok(v_str) = v.to_str() {
@@ -262,6 +280,9 @@ async fn handle_request(
             }
             if k_str.eq_ignore_ascii_case("content-length") {
                 content_length = v_str.parse::<usize>().ok();
+            }
+            if k_str.eq_ignore_ascii_case("accept") {
+                accept_hdr = Some(v_str.to_string());
             }
             header_pairs.push((k_str, v_str.to_string()));
         }
@@ -403,13 +424,16 @@ async fn handle_request(
                     assessment,
                 )
             } else {
+                let tarpit_mode = TarpitPayloadMode::detect(path, accept_hdr.as_deref());
+
                 let _ = proof_logger.log_event(
                     "ASA_SLOW_DRIP_TARPIT_ENGAGED",
                     &client_ip.to_string(),
                     serde_json::json!({
                         "path": path,
                         "peer_ip": peer_ip.to_string(),
-                        "action": "slow_drip_chunked_stream",
+                        "action": "deep_tarpit_asymmetric_drain",
+                        "tarpit_mode": format!("{:?}", tarpit_mode),
                         "active_tarpits": current_active + 1,
                         "threat_assessment": assessment,
                     }),
@@ -417,16 +441,21 @@ async fn handle_request(
 
                 tracker.track_response(client_ip, 200);
 
-                // Infinite Slow-Drip Tarpit with RAII Drop descriptor counter
-                let slow_body =
-                    SlowDripBody::new(tarpit_drip_interval, 1200, Arc::clone(&active_tarpits));
+                // Infinite Slow-Drip Tarpit with RAII Drop descriptor counter & Asymmetric OOM Sink
+                let slow_body = SlowDripBody::new(
+                    tarpit_drip_interval,
+                    1200,
+                    tarpit_mode,
+                    Arc::clone(&active_tarpits),
+                );
                 let boxed_body = slow_body.map_err(|e| match e {}).boxed();
 
                 Response::builder()
                     .status(StatusCode::OK)
-                    .header("content-type", "application/octet-stream")
+                    .header("content-type", tarpit_mode.content_type())
                     .header("transfer-encoding", "chunked")
-                    .header("x-jfp-defense", "slow-drip-tarpit")
+                    .header("x-jfp-defense", "deep-tarpit-economy")
+                    .header("x-jfp-tarpit-sink", format!("{:?}", tarpit_mode))
                     .body(boxed_body)
                     .unwrap()
             }
@@ -560,4 +589,59 @@ async fn forward_to_upstream(
     }
 
     Ok(client_resp.body(box_full(resp_bytes))?)
+}
+
+/// Generates Prometheus-compatible plain text metrics for scraping.
+fn generate_prometheus_metrics(
+    proof_path: &std::path::Path,
+    tracker: &SessionTracker,
+    active_tarpits: usize,
+) -> String {
+    let stats = ForensicReporter::analyze_log(proof_path).unwrap_or_default();
+    let seconds_drained = GLOBAL_TARPIT_SECONDS_DRAINED.load(Ordering::Relaxed);
+    let bytes_drained = GLOBAL_TARPIT_BYTES_DRAINED.load(Ordering::Relaxed);
+    let active_sessions = tracker.active_session_count();
+    let chain_intact = if stats.chain_verified { 1 } else { 0 };
+
+    format!(
+        "# HELP jfp_radar_up Radar daemon running state (1 = healthy).\n\
+# TYPE jfp_radar_up gauge\n\
+jfp_radar_up 1\n\n\
+# HELP jfp_radar_tracked_sessions_total Current active client IP sessions in bounded state.\n\
+# TYPE jfp_radar_tracked_sessions_total gauge\n\
+jfp_radar_tracked_sessions_total {}\n\n\
+# HELP jfp_radar_active_tarpits Current concurrent adversary sockets trapped in deep tarpit.\n\
+# TYPE jfp_radar_active_tarpits gauge\n\
+jfp_radar_active_tarpits {}\n\n\
+# HELP jfp_radar_tarpit_seconds_drained_total Cumulative adversary compute/thread time wasted in slow-drip tarpit.\n\
+# TYPE jfp_radar_tarpit_seconds_drained_total counter\n\
+jfp_radar_tarpit_seconds_drained_total {}\n\n\
+# HELP jfp_radar_tarpit_bytes_drained_total Cumulative asymmetric entropy bytes served to adversary sockets.\n\
+# TYPE jfp_radar_tarpit_bytes_drained_total counter\n\
+jfp_radar_tarpit_bytes_drained_total {}\n\n\
+# HELP jfp_radar_proof_events_total Cryptographically sealed defensive forensic audit records.\n\
+# TYPE jfp_radar_proof_events_total counter\n\
+jfp_radar_proof_events_total{{action=\"block\"}} {}\n\
+jfp_radar_proof_events_total{{action=\"honey\"}} {}\n\
+jfp_radar_proof_events_total{{action=\"tarpit\"}} {}\n\
+jfp_radar_proof_events_total{{action=\"dry_run\"}} {}\n\
+jfp_radar_proof_events_total{{action=\"total\"}} {}\n\n\
+# HELP jfp_radar_unique_attackers Number of unique attacker IP addresses recorded.\n\
+# TYPE jfp_radar_unique_attackers gauge\n\
+jfp_radar_unique_attackers {}\n\n\
+# HELP jfp_radar_cryptographic_chain_intact Proof hash integrity status (1 = unbroken chain, 0 = tampered).\n\
+# TYPE jfp_radar_cryptographic_chain_intact gauge\n\
+jfp_radar_cryptographic_chain_intact {}\n",
+        active_sessions,
+        active_tarpits,
+        seconds_drained,
+        bytes_drained,
+        stats.blocked_attacks,
+        stats.honey_deceptions,
+        stats.tarpitted_sessions,
+        stats.dry_run_simulations,
+        stats.total_records,
+        stats.unique_attacker_ips.len(),
+        chain_intact
+    )
 }

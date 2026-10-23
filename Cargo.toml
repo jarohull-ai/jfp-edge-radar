@@ -1,6 +1,6 @@
 [package]
 name = "jfp-edge-radar"
-version = "0.4.2"
+version = "0.4.3"
 edition = "2021"
 authors = ["jarohull-ai"]
 description = "Deterministic Edge Radar & Reverse Proxy Gateway for sniffing autonomous AI agents, mutating botnets, and PHP-2-Shell (CVE-2026-109618/19) memory exploits."
