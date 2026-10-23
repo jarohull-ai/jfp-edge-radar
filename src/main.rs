@@ -50,7 +50,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         )
         .init();
 
-    info!("Initializing JFP-Paradox Edge Radar (ASA Sniffer) v0.4.0 Hardened Enterprise Core...");
+    info!(
+        "Initializing JFP-Paradox Edge Radar (ASA Sniffer) v{}...",
+        env!("CARGO_PKG_VERSION")
+    );
 
     let mut config = RadarConfig::default();
     if let Ok(addr) = std::env::var("RADAR_BIND_ADDR") {

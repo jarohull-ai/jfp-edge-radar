@@ -69,7 +69,11 @@ impl RadarServer {
         listener: TcpListener,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let local_addr = listener.local_addr()?;
-        info!("JFP-Paradox Edge Radar v0.4.0 listening on {}", local_addr);
+        info!(
+            "JFP-Paradox Edge Radar v{} listening on {}",
+            env!("CARGO_PKG_VERSION"),
+            local_addr
+        );
         info!(
             "State Bounded Capacity: {} max IP sessions",
             self.config.max_sessions_capacity
