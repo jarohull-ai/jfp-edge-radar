@@ -42,7 +42,7 @@ jobs:
       - name: Linter Check (clippy)
         run: cargo clippy --all-targets --all-features -- -D warnings
 
-      - name: Run Full Test Suite (27 Tests)
+      - name: Run Full Test Suite (35 Tests)
         run: cargo test --all-targets --all-features --verbose
 
       - name: Run E2E Security Scenarios Trace
