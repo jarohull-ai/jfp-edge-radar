@@ -3,7 +3,7 @@
 [![License: JFP Fair-Shield (<$10M Free)](https://img.shields.io/badge/License-JFP%20Fair--Shield%20(%3C$10M%20Free)-green.svg)](LICENSE)
 [![Enterprise: Commercial >=$10M](https://img.shields.io/badge/Commercial-%3E=$10M%20Revenue-blue.svg)](LICENSE)
 [![Language: Rust](https://img.shields.io/badge/Rust-1.75%2B-orange.svg)](https://www.rust-lang.org/)
-[![Crates.io](https://img.shields.io/badge/crates.io-v0.4.1-red.svg)](https://crates.io/crates/jfp-edge-radar)
+[![Crates.io](https://img.shields.io/badge/crates.io-v0.4.2-red.svg)](https://crates.io/crates/jfp-edge-radar)
 [![Release](https://img.shields.io/github/v/release/jarohull-ai/jfp-edge-radar)](https://github.com/jarohull-ai/jfp-edge-radar/releases)
 [![Build Status](https://img.shields.io/badge/tests-27%2F27%20passing-brightgreen.svg)]()
 
@@ -178,7 +178,7 @@ cargo build --release
 ## 💻 CLI Commands & Usage
 
 ```text
-🛡️ JFP-Paradox Edge Radar v0.4.1 - Autonomous Agent Sniffer (ASA)
+🛡️ JFP-Paradox Edge Radar v0.4.2 - Autonomous Agent Sniffer (ASA)
 
 USAGE:
     jfp-edge-radar [COMMAND] [OPTIONS]

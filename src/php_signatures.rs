@@ -37,7 +37,15 @@ impl PhpSignatureEngine {
             "%ad",
             "php://input",
             "php://filter",
+            "php://memory",
+            "php://temp",
             "data://text/plain",
+            "phar://",
+            "zip://",
+            "compress.zlib://",
+            "compress.bzip2://",
+            "expect://",
+            "glob://",
         ];
 
         for pattern in &cgi_patterns {
@@ -45,6 +53,16 @@ impl PhpSignatureEngine {
                 score += 0.50;
                 flags.push(format!("PHP_CGI_ARG_INJECTION: detected '{}'", pattern));
             }
+        }
+
+        // 1b. PHP Object Deserialization Gadget Injections (RCE Vector)
+        if query_str.contains("o:") && (query_str.contains(":\"]") || query_str.contains(":\""))
+            || query_str.contains("a:") && query_str.contains(":{")
+        {
+            score += 0.65;
+            flags.push(
+                "PHP_OBJECT_INJECTION: serialized gadget payload pattern detected".to_string(),
+            );
         }
 
         // 2. Probing for high-risk PHP endpoints & debug consoles
@@ -133,5 +151,34 @@ impl PhpSignatureEngine {
             severity_score: score.min(1.0),
             flags,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_php_stream_wrapper_and_deserialization_detection() {
+        let phar_res = PhpSignatureEngine::inspect_request(
+            "/index.php",
+            Some("file=phar://malicious.phar/shell.php"),
+            &[],
+            None,
+        );
+        assert!(phar_res.is_suspicious);
+        assert!(phar_res.flags.iter().any(|f| f.contains("phar://")));
+
+        let gadget_res = PhpSignatureEngine::inspect_request(
+            "/index.php",
+            Some("data=O:8:\"Exploit\":0:{}"),
+            &[],
+            None,
+        );
+        assert!(gadget_res.is_suspicious);
+        assert!(gadget_res
+            .flags
+            .iter()
+            .any(|f| f.contains("PHP_OBJECT_INJECTION")));
     }
 }
