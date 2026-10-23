@@ -142,6 +142,13 @@ impl HudState {
     pub fn warning_color(&self) -> Color {
         Color::Rgb(255, 180, 50)
     }
+
+    pub fn success_color(&self) -> Color {
+        match self.theme {
+            HudTheme::TacticalTeal => Color::Rgb(50, 220, 130),
+            HudTheme::DeepMidnight => Color::Rgb(100, 220, 160),
+        }
+    }
 }
 
 pub struct CommandCenterHud;
@@ -178,11 +185,22 @@ impl CommandCenterHud {
             let stats = ForensicReporter::analyze_log(&state.log_path).unwrap_or_default();
             let records = Self::read_recent_records(&state.log_path, 100);
 
+            // Compute live Tarpit metrics (atomic or inferred from forensic audit)
+            let mut metrics = crate::tarpit::TarpitMetrics::current();
+            if metrics.active_sockets == 0 && stats.tarpitted_sessions > 0 {
+                metrics.drained_cpu_seconds = metrics
+                    .drained_cpu_seconds
+                    .max(stats.tarpitted_sessions * 180);
+                metrics.bytes_drained = metrics.bytes_drained.max(stats.tarpitted_sessions * 4096);
+                metrics.json_sinks_active = stats.json_sinks_engaged as usize;
+                metrics.html_sinks_active = stats.html_sinks_engaged as usize;
+            }
+
             terminal.draw(|f| {
                 if state.panic_mode {
                     Self::render_panic_screen(f, state);
                 } else {
-                    Self::render_hud(f, state, &stats, &records);
+                    Self::render_hud(f, state, &stats, &records, &metrics);
                 }
             })?;
 
@@ -247,7 +265,13 @@ impl CommandCenterHud {
     }
 
     /// Renders the complete Tactical / Deep Midnight HUD.
-    fn render_hud(f: &mut Frame, state: &HudState, stats: &ForensicStats, records: &[ProofRecord]) {
+    fn render_hud(
+        f: &mut Frame,
+        state: &HudState,
+        stats: &ForensicStats,
+        records: &[ProofRecord],
+        metrics: &crate::tarpit::TarpitMetrics,
+    ) {
         let size = f.area();
 
         // Background filler
@@ -265,7 +289,7 @@ impl CommandCenterHud {
             .split(size);
 
         Self::render_header(f, state, main_chunks[0], stats);
-        Self::render_main_area(f, state, main_chunks[1], stats, records);
+        Self::render_main_area(f, state, main_chunks[1], stats, records, metrics);
         Self::render_footer(f, state, main_chunks[2], stats);
     }
 
@@ -314,7 +338,7 @@ impl CommandCenterHud {
         let subtitle_line = Line::from(vec![
             Span::styled("Engine: ", Style::default().fg(state.secondary_color())),
             Span::styled(
-                "v0.4.2 Hardened Core  ",
+                "v0.4.3 Deep Tarpit Economy  ",
                 Style::default().fg(state.text_color()),
             ),
             Span::styled("Ingress: ", Style::default().fg(state.secondary_color())),
@@ -339,6 +363,7 @@ impl CommandCenterHud {
         area: Rect,
         stats: &ForensicStats,
         records: &[ProofRecord],
+        metrics: &crate::tarpit::TarpitMetrics,
     ) {
         if state.focus_mode {
             // Fullscreen table mode
@@ -349,10 +374,10 @@ impl CommandCenterHud {
         // Split top and bottom
         let rows = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Length(9), Constraint::Min(8)])
+            .constraints([Constraint::Length(10), Constraint::Min(8)])
             .split(area);
 
-        // Top Row: Split Left (Vectors) and Right (Gauges & Asymmetry)
+        // Top Row: Split Left (Vectors) and Right (Deep Tarpit Economy Live Panel)
         let top_cols = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
@@ -362,7 +387,7 @@ impl CommandCenterHud {
             Self::render_vectors_panel(f, state, top_cols[0], stats);
         }
         if state.show_gauges {
-            Self::render_gauges_panel(f, state, top_cols[1], stats);
+            Self::render_tarpit_panel(f, state, top_cols[1], stats, metrics);
         }
 
         // Bottom Row: Threat Ledger Table
@@ -415,64 +440,142 @@ impl CommandCenterHud {
         f.render_widget(p, area);
     }
 
-    fn render_gauges_panel(f: &mut Frame, state: &HudState, area: Rect, stats: &ForensicStats) {
-        let chunks = Layout::default()
+    pub fn render_tarpit_panel(
+        f: &mut Frame,
+        state: &HudState,
+        area: Rect,
+        _stats: &ForensicStats,
+        metrics: &crate::tarpit::TarpitMetrics,
+    ) {
+        let block = Block::default()
+            .title(" ⚡ [2] DEEP TARPIT ECONOMY (LIVE) ")
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+            .border_style(Style::default().fg(state.primary_color()));
+
+        let inner = block.inner(area);
+        f.render_widget(block, area);
+
+        // Split vertically: Upper (Two columns of metrics), Lower (Concurrency Guard Bar)
+        let v_chunks = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(3),
-                Constraint::Length(3),
-                Constraint::Min(2),
-            ])
-            .split(area);
+            .constraints([Constraint::Length(4), Constraint::Min(3)])
+            .split(inner);
 
-        // Tarpit Concurrency Gauge
-        let tarpit_ratio = (stats.tarpitted_sessions as f64 / 512.0).clamp(0.0, 1.0);
-        let tarpit_gauge = Gauge::default()
-            .block(Block::default().title(" 🛡️ [2] TARPIT SOCKET CONCURRENCY "))
+        // Subdivide upper into Left (Active Sockets & Sinks) and Right (Botnet Resource Waste)
+        let h_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+            .split(v_chunks[0]);
+
+        // Panel 1: Aktywne sockety i sockety w pułapkach
+        let active_text = vec![
+            Line::from(vec![
+                Span::styled(
+                    "Active Sockets:  ",
+                    Style::default().fg(state.secondary_color()),
+                ),
+                Span::styled(
+                    format!("{}", metrics.active_sockets),
+                    Style::default()
+                        .fg(state.primary_color())
+                        .add_modifier(Modifier::BOLD),
+                ),
+            ]),
+            Line::from(vec![
+                Span::styled(
+                    "JSON Sinks (C2): ",
+                    Style::default().fg(state.secondary_color()),
+                ),
+                Span::styled(
+                    format!("{}", metrics.json_sinks_active),
+                    Style::default().fg(state.text_color()),
+                ),
+            ]),
+            Line::from(vec![
+                Span::styled(
+                    "HTML DOM Sinks:  ",
+                    Style::default().fg(state.secondary_color()),
+                ),
+                Span::styled(
+                    format!("{}", metrics.html_sinks_active),
+                    Style::default().fg(state.text_color()),
+                ),
+            ]),
+        ];
+        let left_widget =
+            Paragraph::new(active_text).block(Block::default().borders(Borders::NONE));
+
+        // Panel 2: Straty zasobów botnetu
+        let drained_mins = metrics.drained_cpu_seconds / 60;
+        let drained_secs = metrics.drained_cpu_seconds % 60;
+        let waste_time_str = if drained_mins > 0 {
+            format!("{}m {}s", drained_mins, drained_secs)
+        } else {
+            format!("{}s", drained_secs)
+        };
+
+        let waste_text = vec![
+            Line::from(vec![
+                Span::styled(
+                    "Bot CPU Drained: ",
+                    Style::default().fg(state.secondary_color()),
+                ),
+                Span::styled(
+                    waste_time_str,
+                    Style::default()
+                        .fg(state.warning_color())
+                        .add_modifier(Modifier::BOLD),
+                ),
+            ]),
+            Line::from(vec![
+                Span::styled(
+                    "Bytes Drained:   ",
+                    Style::default().fg(state.secondary_color()),
+                ),
+                Span::styled(
+                    format!("{} KB", metrics.bytes_drained / 1024),
+                    Style::default().fg(state.text_color()),
+                ),
+            ]),
+            Line::from(vec![
+                Span::styled(
+                    "Concurrency Cap: ",
+                    Style::default().fg(state.secondary_color()),
+                ),
+                Span::styled(
+                    format!("{}/{}", metrics.active_sockets, metrics.max_concurrency),
+                    Style::default().fg(state.success_color()),
+                ),
+            ]),
+        ];
+        let right_widget =
+            Paragraph::new(waste_text).block(Block::default().borders(Borders::NONE));
+
+        f.render_widget(left_widget, h_chunks[0]);
+        f.render_widget(right_widget, h_chunks[1]);
+
+        // Lower: Concurrency Guard Bar Gauge
+        let ratio =
+            (metrics.active_sockets as f64 / metrics.max_concurrency as f64).clamp(0.0, 1.0);
+        let guard_gauge = Gauge::default()
+            .block(Block::default().title(" 🛡️ CONCURRENCY GUARD "))
             .gauge_style(
                 Style::default()
-                    .fg(state.primary_color())
+                    .fg(if ratio > 0.8 {
+                        state.alert_color()
+                    } else {
+                        state.primary_color()
+                    })
                     .bg(state.bg_color()),
             )
-            .ratio(tarpit_ratio)
-            .label(format!("{}/512 Sockets", stats.tarpitted_sessions));
+            .ratio(ratio)
+            .label(format!(
+                "{}/{} Sockets (Bound)",
+                metrics.active_sockets, metrics.max_concurrency
+            ));
 
-        f.render_widget(tarpit_gauge, chunks[0]);
-
-        // State Capacity LRU Gauge
-        let lru_ratio = (stats.unique_attacker_ips.len() as f64 / 131072.0).clamp(0.0, 1.0);
-        let lru_gauge = Gauge::default()
-            .block(Block::default().title(" 🧠 BOUNDED LRU STATE CAPACITY "))
-            .gauge_style(
-                Style::default()
-                    .fg(state.secondary_color())
-                    .bg(state.bg_color()),
-            )
-            .ratio(lru_ratio)
-            .label(format!("{}/131k Sessions", stats.unique_attacker_ips.len()));
-
-        f.render_widget(lru_gauge, chunks[1]);
-
-        // Burned Token Asymmetry
-        let tokens = (stats.blocked_attacks + stats.honey_deceptions) * 850;
-        let p = Paragraph::new(Line::from(vec![
-            Span::styled(
-                "  Attacker Tokens Burned: ",
-                Style::default().fg(state.secondary_color()),
-            ),
-            Span::styled(
-                format!("~{} tokens  ", tokens),
-                Style::default()
-                    .fg(state.primary_color())
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                "Backend Overhead: ",
-                Style::default().fg(state.secondary_color()),
-            ),
-            Span::styled("0.0% (Isolated)", Style::default().fg(state.text_color())),
-        ]));
-        f.render_widget(p, chunks[2]);
+        f.render_widget(guard_gauge, v_chunks[1]);
     }
 
     fn render_ledger_table(f: &mut Frame, state: &HudState, area: Rect, records: &[ProofRecord]) {
@@ -745,5 +848,31 @@ mod tests {
         assert!(state.panic_mode);
         state.toggle_panic();
         assert!(!state.panic_mode);
+    }
+
+    #[test]
+    fn test_hud_tarpit_panel_rendering() {
+        use ratatui::backend::TestBackend;
+
+        let backend = TestBackend::new(120, 40);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        let state = HudState::new(PathBuf::from("/tmp/nonexistent_proof.jsonl"));
+        let stats = ForensicStats::default();
+        let records = Vec::new();
+        let metrics = crate::tarpit::TarpitMetrics {
+            active_sockets: 42,
+            json_sinks_active: 28,
+            html_sinks_active: 14,
+            drained_cpu_seconds: 3600,
+            bytes_drained: 1048576,
+            max_concurrency: 512,
+        };
+
+        terminal
+            .draw(|f| {
+                CommandCenterHud::render_hud(f, &state, &stats, &records, &metrics);
+            })
+            .unwrap();
     }
 }

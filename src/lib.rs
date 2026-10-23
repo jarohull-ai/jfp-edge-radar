@@ -26,7 +26,7 @@ pub use proof::{ProofLogger, ProofRecord};
 pub use report::{ForensicReporter, ForensicStats};
 pub use server::RadarServer;
 pub use tarpit::{
-    SlowDripBody, TarpitGuard, TarpitPayloadMode, GLOBAL_TARPIT_BYTES_DRAINED,
+    SlowDripBody, TarpitGuard, TarpitMetrics, TarpitPayloadMode, GLOBAL_TARPIT_BYTES_DRAINED,
     GLOBAL_TARPIT_SECONDS_DRAINED,
 };
 pub use tracker::{canonicalize_tracking_ip, IpSession, RequestSnapshot, SessionTracker};

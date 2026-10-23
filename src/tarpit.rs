@@ -10,6 +10,33 @@ use tokio::time::{interval, Interval};
 /// Global Deep Tarpit Economy metrics for Prometheus & HUD telemetry.
 pub static GLOBAL_TARPIT_SECONDS_DRAINED: AtomicU64 = AtomicU64::new(0);
 pub static GLOBAL_TARPIT_BYTES_DRAINED: AtomicU64 = AtomicU64::new(0);
+pub static GLOBAL_TARPIT_ACTIVE_SOCKETS: AtomicUsize = AtomicUsize::new(0);
+pub static GLOBAL_JSON_SINKS_ACTIVE: AtomicUsize = AtomicUsize::new(0);
+pub static GLOBAL_HTML_SINKS_ACTIVE: AtomicUsize = AtomicUsize::new(0);
+
+/// Live Tarpit telemetry snapshot for Ratatui HUD and reporting.
+#[derive(Debug, Clone, Default)]
+pub struct TarpitMetrics {
+    pub active_sockets: usize,
+    pub json_sinks_active: usize,
+    pub html_sinks_active: usize,
+    pub drained_cpu_seconds: u64,
+    pub bytes_drained: u64,
+    pub max_concurrency: usize,
+}
+
+impl TarpitMetrics {
+    pub fn current() -> Self {
+        Self {
+            active_sockets: GLOBAL_TARPIT_ACTIVE_SOCKETS.load(Ordering::Relaxed),
+            json_sinks_active: GLOBAL_JSON_SINKS_ACTIVE.load(Ordering::Relaxed),
+            html_sinks_active: GLOBAL_HTML_SINKS_ACTIVE.load(Ordering::Relaxed),
+            drained_cpu_seconds: GLOBAL_TARPIT_SECONDS_DRAINED.load(Ordering::Relaxed),
+            bytes_drained: GLOBAL_TARPIT_BYTES_DRAINED.load(Ordering::Relaxed),
+            max_concurrency: 512,
+        }
+    }
+}
 
 /// Asymmetric adversarial payload sink modes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -60,6 +87,7 @@ impl TarpitPayloadMode {
 /// RAII Drop Guard tracking active tarpit sockets and recording adversarial seconds wasted.
 pub struct TarpitGuard {
     counter: Arc<AtomicUsize>,
+    mode: TarpitPayloadMode,
     start_time: Instant,
     bytes_served: Arc<AtomicU64>,
 }
@@ -70,6 +98,17 @@ impl Drop for TarpitGuard {
             .counter
             .fetch_sub(1, Ordering::SeqCst)
             .saturating_sub(1);
+        GLOBAL_TARPIT_ACTIVE_SOCKETS.fetch_sub(1, Ordering::SeqCst);
+        match self.mode {
+            TarpitPayloadMode::InfiniteJsonSink => {
+                GLOBAL_JSON_SINKS_ACTIVE.fetch_sub(1, Ordering::Relaxed);
+            }
+            TarpitPayloadMode::InfiniteHtmlSink => {
+                GLOBAL_HTML_SINKS_ACTIVE.fetch_sub(1, Ordering::Relaxed);
+            }
+            _ => {}
+        }
+
         let elapsed_secs = self.start_time.elapsed().as_secs();
         let bytes = self.bytes_served.load(Ordering::Relaxed);
 
@@ -103,9 +142,21 @@ impl SlowDripBody {
         counter: Arc<AtomicUsize>,
     ) -> Self {
         counter.fetch_add(1, Ordering::SeqCst);
+        GLOBAL_TARPIT_ACTIVE_SOCKETS.fetch_add(1, Ordering::SeqCst);
+        match mode {
+            TarpitPayloadMode::InfiniteJsonSink => {
+                GLOBAL_JSON_SINKS_ACTIVE.fetch_add(1, Ordering::Relaxed);
+            }
+            TarpitPayloadMode::InfiniteHtmlSink => {
+                GLOBAL_HTML_SINKS_ACTIVE.fetch_add(1, Ordering::Relaxed);
+            }
+            _ => {}
+        }
+
         let bytes_served = Arc::new(AtomicU64::new(0));
         let guard = TarpitGuard {
             counter,
+            mode,
             start_time: Instant::now(),
             bytes_served: Arc::clone(&bytes_served),
         };

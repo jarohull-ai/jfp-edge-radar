@@ -18,6 +18,8 @@ pub struct ForensicStats {
     pub unique_attacker_ips: HashSet<String>,
     pub vector_distribution: HashMap<String, u64>,
     pub top_offenders: HashMap<String, u64>,
+    pub json_sinks_engaged: u64,
+    pub html_sinks_engaged: u64,
 }
 
 pub struct ForensicReporter;
@@ -110,14 +112,25 @@ impl ForensicReporter {
                 "ASA_HONEY_DECEPTION_SERVED" => {
                     stats.honey_deceptions += 1;
                 }
+                "ASA_SLOW_DRIP_TARPIT_ENGAGED" => {
+                    stats.tarpitted_sessions += 1;
+                }
                 "ASA_ATTACK_SIMULATED_DRY_RUN" => {
                     stats.dry_run_simulations += 1;
                 }
                 _ => {}
             }
 
-            // Extract vector details from payload_summary
+            // Extract vector details and sink modes from payload_summary
             if let Some(summary) = record.get("payload_summary") {
+                if let Some(mode) = summary.get("tarpit_mode").and_then(|v| v.as_str()) {
+                    if mode.contains("Json") {
+                        stats.json_sinks_engaged += 1;
+                    } else if mode.contains("Html") {
+                        stats.html_sinks_engaged += 1;
+                    }
+                }
+
                 if let Some(indicators) = summary
                     .get("threat_assessment")
                     .and_then(|t| t.get("indicators"))
