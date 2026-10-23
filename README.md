@@ -14,6 +14,7 @@ It is engineered specifically to intercept autonomous AI agent botnets, mutating
 ---
 
 ### 📖 Full Project Wiki & Knowledge Base
+* 🎛️ **[Command Center HUD Cockpit (Ratatui TUI & Stealth Mode)](wiki/Command-Center-HUD.md)**
 * 🏛️ **[Architecture & The 3 Shields](wiki/Architecture-and-The-Three-Shields.md)**
 * 🚀 **[Production Deployment & Systemd Guide](wiki/Production-Deployment-Guide.md)**
 * 🔍 **[Incident Response & Forensic Cryptographic Auditing](wiki/Incident-Response-and-Forensics.md)**
@@ -207,11 +208,20 @@ export RADAR_PROOF_LOG="/var/log/jfp/asa_radar_proof.jsonl"
 jfp-edge-radar
 ```
 
-### 3. Live NOC Terminal Monitor
-To observe live attacks, request rates, anomaly scores, and tarpit sessions in real-time:
+### 3. Interactive Command Center HUD (Ratatui TUI)
+Launch the military-grade cyber defense cockpit:
 ```bash
 jfp-edge-radar monitor --log /var/log/jfp/asa_radar_proof.jsonl
 ```
+
+#### Cockpit Controls & Stealth Features:
+* **`[T]` Theme Toggle:** Switch between **Tactical Teal** (daytime contrast) and **Deep Midnight** (nighttime stealth & retina protection).
+* **`[F]` Focus Mode:** Toggle fullscreen threat ledger view.
+* **`[C]` Contrast Cycling:** Soft / Normal / High contrast levels.
+* **`[1-3]` Panel Toggling:** Show/hide Ingress Vectors `[1]`, Tarpit & State Gauges `[2]`, and Threat Ledger `[3]`.
+* **`[ESC]` PANIC BUTTON:** Instantly swaps the HUD with realistic Linux kernel build output (`make bzImage`), concealing operations from onlookers. Press `[ESC]` again to resume.
+* **`[R]` Quick Report:** Instantly compiles and saves an SHA-256 audited forensic report in `/tmp/`.
+* **`[↑/↓]` / `[j/k]`:** Scroll through live chained security records.
 
 ### 4. Generate SOC Incident Report
 To run a cryptographic audit on the proof chain and produce a Markdown incident report:

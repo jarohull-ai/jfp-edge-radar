@@ -1,6 +1,7 @@
 ### 🛡️ JFP-Paradox Edge Radar Wiki
 
 * **[Home](Home)**
+* **[Command Center HUD Cockpit](Command-Center-HUD)**
 * **[Architecture & The 3 Shields](Architecture-and-The-Three-Shields)**
 * **[Production Deployment Guide](Production-Deployment-Guide)**
 * **[Incident Response & Forensics](Incident-Response-and-Forensics)**

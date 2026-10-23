@@ -1,6 +1,7 @@
 pub mod analyzer;
 pub mod canonical;
 pub mod config;
+pub mod hud;
 pub mod init;
 pub mod ip_extractor;
 pub mod mitigation;
@@ -15,6 +16,7 @@ pub mod tracker;
 pub use analyzer::{AsaAnalyzer, DefensiveAction, ThreatAssessment};
 pub use canonical::{AmbiguityViolation, CanonicalShield};
 pub use config::RadarConfig;
+pub use hud::{CommandCenterHud, HudState, HudTheme};
 pub use init::InitWizard;
 pub use ip_extractor::ClientIpExtractor;
 pub use mitigation::OsFirewallMitigation;

@@ -1,3 +1,4 @@
+use crate::hud::CommandCenterHud;
 use crate::report::ForensicReporter;
 use std::path::Path;
 use std::time::Duration;
@@ -6,11 +7,17 @@ use tokio::time::sleep;
 pub struct TerminalMonitor;
 
 impl TerminalMonitor {
-    /// Runs a live-updating terminal dashboard (NOC screen) monitoring the proof log.
+    /// Runs the interactive Command Center HUD (Ratatui TUI) or falls back to text monitor.
     pub async fn run(
         log_path: &Path,
         refresh_interval: Duration,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        // Attempt full interactive Ratatui Command Center HUD
+        if CommandCenterHud::run(log_path).is_ok() {
+            return Ok(());
+        }
+
+        // Fallback for non-interactive shells, pipes, or headless environments
         loop {
             // ANSI escape to clear terminal and reset cursor
             print!("\x1B[2J\x1B[1;1H");
@@ -19,7 +26,7 @@ impl TerminalMonitor {
                 "╔════════════════════════════════════════════════════════════════════════════╗"
             );
             println!(
-                "║          📡 JFP-PARADOX EDGE RADAR (v0.3.0) — LIVE COMBAT MONITOR         ║"
+                "║          📡 JFP-PARADOX EDGE RADAR — LIVE HEADLESS TELEMETRY               ║"
             );
             println!(
                 "╚════════════════════════════════════════════════════════════════════════════╝"
